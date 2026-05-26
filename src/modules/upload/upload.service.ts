@@ -1,9 +1,13 @@
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import * as sharp from 'sharp';
-import { v4 as uuidv4 } from 'uuid';
+import { Injectable } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import sharp from "sharp";
+import { v4 as uuidv4 } from "uuid";
 
 export interface UploadedImageUrls {
   original: string;
@@ -20,21 +24,28 @@ export class UploadService {
 
   constructor(private readonly configService: ConfigService) {
     this.s3 = new S3Client({
-      region: configService.get<string>('aws.region'),
+      region: this.configService.get<string>("aws.region") ?? "default",
       credentials: {
-        accessKeyId: configService.get<string>('aws.accessKeyId'),
-        secretAccessKey: configService.get<string>('aws.secretAccessKey'),
+        accessKeyId: this.configService.get<string>("aws.accessKeyId") ?? "",
+        secretAccessKey:
+          this.configService.get<string>("aws.secretAccessKey") ?? "",
       },
     });
-    this.bucket = configService.get<string>('aws.s3BucketImages') ?? '';
-    this.cdnUrl = configService.get<string>('aws.cloudfrontUrl') ?? '';
+    this.bucket = this.configService.get<string>("aws.s3BucketImages") ?? "";
+    this.cdnUrl = this.configService.get<string>("aws.cloudfrontUrl") ?? "";
   }
 
   private getUrl(key: string): string {
-    return this.cdnUrl ? `${this.cdnUrl}/${key}` : `https://${this.bucket}.s3.amazonaws.com/${key}`;
+    return this.cdnUrl
+      ? `${this.cdnUrl}/${key}`
+      : `https://${this.bucket}.s3.amazonaws.com/${key}`;
   }
 
-  private async uploadBuffer(buffer: Buffer, key: string, contentType = 'image/webp'): Promise<string> {
+  private async uploadBuffer(
+    buffer: Buffer,
+    key: string,
+    contentType = "image/webp",
+  ): Promise<string> {
     await this.s3.send(
       new PutObjectCommand({
         Bucket: this.bucket,
@@ -51,9 +62,18 @@ export class UploadService {
     const prefix = `products/${id}`;
 
     const [thumbnail, medium, large, original] = await Promise.all([
-      sharp(file.buffer).resize(150, 150, { fit: 'cover' }).webp({ quality: 80 }).toBuffer(),
-      sharp(file.buffer).resize(500, 500, { fit: 'inside' }).webp({ quality: 85 }).toBuffer(),
-      sharp(file.buffer).resize(1200, 1200, { fit: 'inside' }).webp({ quality: 90 }).toBuffer(),
+      sharp(file.buffer)
+        .resize(150, 150, { fit: "cover" })
+        .webp({ quality: 80 })
+        .toBuffer(),
+      sharp(file.buffer)
+        .resize(500, 500, { fit: "inside" })
+        .webp({ quality: 85 })
+        .toBuffer(),
+      sharp(file.buffer)
+        .resize(1200, 1200, { fit: "inside" })
+        .webp({ quality: 90 })
+        .toBuffer(),
       sharp(file.buffer).webp({ quality: 95 }).toBuffer(),
     ]);
 
@@ -64,11 +84,18 @@ export class UploadService {
       this.uploadBuffer(original, `${prefix}/original.webp`),
     ]);
 
-    return { original: originalUrl, thumbnail: thumbnailUrl, medium: mediumUrl, large: largeUrl };
+    return {
+      original: originalUrl,
+      thumbnail: thumbnailUrl,
+      medium: mediumUrl,
+      large: largeUrl,
+    };
   }
 
   async deleteImage(key: string): Promise<void> {
-    await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+    await this.s3.send(
+      new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
+    );
   }
 
   async getPresignedUrl(key: string, expiresIn = 3600): Promise<string> {

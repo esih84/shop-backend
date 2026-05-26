@@ -2,20 +2,23 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
-import { Order, OrderStatus } from './entities/order.entity';
-import { OrderItem } from './entities/order-item.entity';
-import { Cart } from '../cart/entities/cart.entity';
-import { CartItem } from '../cart/entities/cart-item.entity';
-import { ProductVariant } from '../products/entities/product-variant.entity';
-import { Coupon, CouponType } from '../coupons/entities/coupon.entity';
-import { CouponUsage } from '../coupons/entities/coupon-usage.entity';
-import { UserLoyalty } from '../loyalty/entities/user-loyalty.entity';
-import { PointTransaction, PointTransactionType } from '../loyalty/entities/point-transaction.entity';
-import { CreateOrderDto } from './dto/order.dto';
-import { User } from '../users/entities/user.entity';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository, DataSource } from "typeorm";
+import { Order, OrderStatus } from "./entities/order.entity";
+import { OrderItem } from "./entities/order-item.entity";
+import { Cart } from "../cart/entities/cart.entity";
+import { CartItem } from "../cart/entities/cart-item.entity";
+import { ProductVariant } from "../products/entities/product-variant.entity";
+import { Coupon, CouponType } from "../coupons/entities/coupon.entity";
+import { CouponUsage } from "../coupons/entities/coupon-usage.entity";
+import { UserLoyalty } from "../loyalty/entities/user-loyalty.entity";
+import {
+  PointTransaction,
+  PointTransactionType,
+} from "../loyalty/entities/point-transaction.entity";
+import { CreateOrderDto } from "./dto/order.dto";
+import { User } from "../users/entities/user.entity";
 
 @Injectable()
 export class OrdersService {
@@ -40,11 +43,11 @@ export class OrdersService {
   async createFromCart(user: User, dto: CreateOrderDto): Promise<Order> {
     const cart = await this.cartRepository.findOne({
       where: { userId: user.id },
-      relations: ['items', 'items.variant', 'items.variant.product'],
+      relations: { items: { variant: { product: true } } },
     });
 
     if (!cart?.items?.length) {
-      throw new BadRequestException('Cart is empty');
+      throw new BadRequestException("Cart is empty");
     }
 
     return this.dataSource.transaction(async (manager) => {
@@ -56,14 +59,18 @@ export class OrdersService {
       for (const item of cart.items) {
         const variant = await manager.findOne(ProductVariant, {
           where: { id: item.variantId },
-          lock: { mode: 'pessimistic_write' },
+          lock: { mode: "pessimistic_write" },
         });
 
         if (!variant || !variant.isActive) {
-          throw new BadRequestException(`Variant ${item.variantId} is no longer available`);
+          throw new BadRequestException(
+            `Variant ${item.variantId} is no longer available`,
+          );
         }
         if (variant.stock < item.quantity) {
-          throw new BadRequestException(`Insufficient stock for ${variant.sku}`);
+          throw new BadRequestException(
+            `Insufficient stock for ${variant.sku}`,
+          );
         }
 
         const itemTotal = Number(variant.price) * item.quantity;
@@ -72,7 +79,11 @@ export class OrdersService {
         orderItems.push({
           variantId: variant.id,
           productName: item.variant?.product?.name ?? variant.sku,
-          variantDetails: { color: variant.color, size: variant.size, sku: variant.sku },
+          variantDetails: {
+            color: variant.color,
+            size: variant.size,
+            sku: variant.sku,
+          },
           quantity: item.quantity,
           unitPrice: Number(variant.price),
           totalPrice: itemTotal,
@@ -90,7 +101,9 @@ export class OrdersService {
           where: { code: dto.couponCode, isActive: true },
         });
         if (coupon) {
-          const usageCount = await manager.count(CouponUsage, { where: { couponId: coupon.id } });
+          const usageCount = await manager.count(CouponUsage, {
+            where: { couponId: coupon.id },
+          });
           const userUsageCount = await manager.count(CouponUsage, {
             where: { couponId: coupon.id, userId: user.id },
           });
@@ -105,7 +118,10 @@ export class OrdersService {
             if (coupon.type === CouponType.PERCENTAGE) {
               discountAmount = (totalAmount * Number(coupon.value)) / 100;
               if (coupon.maxDiscount) {
-                discountAmount = Math.min(discountAmount, Number(coupon.maxDiscount));
+                discountAmount = Math.min(
+                  discountAmount,
+                  Number(coupon.maxDiscount),
+                );
               }
             } else if (coupon.type === CouponType.FIXED) {
               discountAmount = Math.min(Number(coupon.value), totalAmount);
@@ -125,7 +141,9 @@ export class OrdersService {
       // Apply loyalty points
       let pointsRedeemedAmount = 0;
       if (dto.pointsToRedeem && dto.pointsToRedeem > 0) {
-        const loyalty = await manager.findOne(UserLoyalty, { where: { userId: user.id } });
+        const loyalty = await manager.findOne(UserLoyalty, {
+          where: { userId: user.id },
+        });
         if (loyalty && loyalty.availablePoints >= dto.pointsToRedeem) {
           pointsRedeemedAmount = dto.pointsToRedeem / 100; // 100 points = 1 currency unit
           discountAmount += pointsRedeemedAmount;
@@ -140,7 +158,7 @@ export class OrdersService {
               userId: user.id,
               points: -dto.pointsToRedeem,
               type: PointTransactionType.REDEEM,
-              reason: 'Points redeemed on order',
+              reason: "Points redeemed on order",
             }),
           );
         }
@@ -171,8 +189,8 @@ export class OrdersService {
   async findUserOrders(userId: string, page = 1, limit = 20) {
     const [orders, total] = await this.orderRepository.findAndCount({
       where: { userId },
-      relations: ['items'],
-      order: { createdAt: 'DESC' },
+      relations: { items: true },
+      order: { createdAt: "DESC" },
       skip: (page - 1) * limit,
       take: limit,
     });
@@ -185,9 +203,9 @@ export class OrdersService {
 
     const order = await this.orderRepository.findOne({
       where,
-      relations: ['items', 'user'],
+      relations: { items: true, user: true },
     });
-    if (!order) throw new NotFoundException('Order not found');
+    if (!order) throw new NotFoundException("Order not found");
     return order;
   }
 

@@ -1,10 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { LoyaltyTier } from './entities/loyalty-tier.entity';
-import { UserLoyalty } from './entities/user-loyalty.entity';
-import { PointTransaction, PointTransactionType } from './entities/point-transaction.entity';
-import { CreateLoyaltyTierDto } from './dto/loyalty.dto';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { LoyaltyTier } from "./entities/loyalty-tier.entity";
+import { UserLoyalty } from "./entities/user-loyalty.entity";
+import {
+  PointTransaction,
+  PointTransactionType,
+} from "./entities/point-transaction.entity";
+import { CreateLoyaltyTierDto } from "./dto/loyalty.dto";
 
 @Injectable()
 export class LoyaltyService {
@@ -23,21 +26,24 @@ export class LoyaltyService {
   }
 
   async findAllTiers(): Promise<LoyaltyTier[]> {
-    return this.tierRepository.find({ order: { minPoints: 'ASC' } });
+    return this.tierRepository.find({ order: { minPoints: "ASC" } });
   }
 
-  async updateTier(id: string, dto: Partial<CreateLoyaltyTierDto>): Promise<LoyaltyTier> {
-    await this.tierRepository.update(id, dto);
+  async updateTier(
+    id: string,
+    dto: Partial<CreateLoyaltyTierDto>,
+  ): Promise<LoyaltyTier> {
     const tier = await this.tierRepository.findOne({ where: { id } });
-    if (!tier) throw new NotFoundException('Tier not found');
-    return tier;
+    if (!tier) throw new NotFoundException("Tier not found");
+    Object.assign(tier, dto);
+    return this.tierRepository.save(tier);
   }
 
   // User loyalty
   async getUserLoyalty(userId: string): Promise<UserLoyalty> {
     let loyalty = await this.userLoyaltyRepository.findOne({
       where: { userId },
-      relations: ['tier'],
+      relations: { tier: true },
     });
     if (!loyalty) {
       loyalty = await this.userLoyaltyRepository.save(
@@ -47,8 +53,16 @@ export class LoyaltyService {
     return loyalty;
   }
 
-  async earnPoints(userId: string, points: number, reason: string, referenceType?: string, referenceId?: string): Promise<void> {
-    let loyalty = await this.userLoyaltyRepository.findOne({ where: { userId } });
+  async earnPoints(
+    userId: string,
+    points: number,
+    reason: string,
+    referenceType?: string,
+    referenceId?: string,
+  ): Promise<void> {
+    let loyalty = await this.userLoyaltyRepository.findOne({
+      where: { userId },
+    });
     if (!loyalty) {
       loyalty = await this.userLoyaltyRepository.save(
         this.userLoyaltyRepository.create({ userId }),
@@ -75,23 +89,31 @@ export class LoyaltyService {
   }
 
   private async checkAndUpgradeTier(userId: string): Promise<void> {
-    const loyalty = await this.userLoyaltyRepository.findOne({ where: { userId } });
+    const loyalty = await this.userLoyaltyRepository.findOne({
+      where: { userId },
+    });
     if (!loyalty) return;
 
-    const tiers = await this.tierRepository.find({ order: { minPoints: 'DESC' } });
+    const tiers = await this.tierRepository.find({
+      order: { minPoints: "DESC" },
+    });
     const eligibleTier = tiers.find(
-      (t) => loyalty.totalPoints >= t.minPoints && Number(loyalty.totalSpent) >= Number(t.minSpent),
+      (t) =>
+        loyalty.totalPoints >= t.minPoints &&
+        Number(loyalty.totalSpent) >= Number(t.minSpent),
     );
 
     if (eligibleTier && loyalty.tierId !== eligibleTier.id) {
-      await this.userLoyaltyRepository.update(loyalty.id, { tierId: eligibleTier.id });
+      await this.userLoyaltyRepository.update(loyalty.id, {
+        tierId: eligibleTier.id,
+      });
     }
   }
 
   async getTransactionHistory(userId: string, page = 1, limit = 20) {
     const [transactions, total] = await this.pointTxRepository.findAndCount({
       where: { userId },
-      order: { createdAt: 'DESC' },
+      order: { createdAt: "DESC" },
       skip: (page - 1) * limit,
       take: limit,
     });

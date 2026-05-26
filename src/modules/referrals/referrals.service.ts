@@ -1,8 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Referral, ReferralStatus } from './entities/referral.entity';
-import { User } from '../users/entities/user.entity';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { Referral, ReferralStatus } from "./entities/referral.entity";
+import { User } from "../users/entities/user.entity";
 
 @Injectable()
 export class ReferralsService {
@@ -16,13 +16,15 @@ export class ReferralsService {
   async getReferrals(userId: string) {
     return this.referralRepository.find({
       where: { referrerId: userId },
-      relations: ['referred'],
-      order: { createdAt: 'DESC' },
+      relations: { referred: true },
+      order: { createdAt: "DESC" },
     });
   }
 
   async trackReferral(referralCode: string, newUserId: string): Promise<void> {
-    const referrer = await this.userRepository.findOne({ where: { referralCode } });
+    const referrer = await this.userRepository.findOne({
+      where: { referralCode },
+    });
     if (!referrer) return;
 
     const existing = await this.referralRepository.findOne({

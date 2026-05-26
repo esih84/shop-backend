@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Blog } from './entities/blog.entity';
-import { CreateBlogDto } from './dto/blog.dto';
-import { User } from '../users/entities/user.entity';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { Blog } from "./entities/blog.entity";
+import { CreateBlogDto } from "./dto/blog.dto";
+import { User } from "../users/entities/user.entity";
 
 @Injectable()
 export class BlogsService {
@@ -16,7 +16,7 @@ export class BlogsService {
     const blog = this.blogRepository.create({
       ...dto,
       authorId: author.id,
-      publishedAt: dto.isPublished ? new Date() : null,
+      publishedAt: dto.isPublished ? new Date() : undefined,
     });
     return this.blogRepository.save(blog);
   }
@@ -24,7 +24,7 @@ export class BlogsService {
   async findAll(page = 1, limit = 20) {
     const [blogs, total] = await this.blogRepository.findAndCount({
       where: { isPublished: true },
-      order: { publishedAt: 'DESC' },
+      order: { publishedAt: "DESC" },
       skip: (page - 1) * limit,
       take: limit,
     });
@@ -33,7 +33,7 @@ export class BlogsService {
 
   async findBySlug(slug: string): Promise<Blog> {
     const blog = await this.blogRepository.findOne({ where: { slug } });
-    if (!blog) throw new NotFoundException('Blog not found');
+    if (!blog) throw new NotFoundException("Blog not found");
     return blog;
   }
 

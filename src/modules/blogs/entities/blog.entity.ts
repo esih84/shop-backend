@@ -7,12 +7,12 @@ import {
   Index,
   CreateDateColumn,
   UpdateDateColumn,
-} from 'typeorm';
-import { User } from '../../users/entities/user.entity';
+} from "typeorm";
+import { User } from "../../users/entities/user.entity";
 
-@Entity('blogs')
+@Entity("blogs")
 export class Blog {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @Column()
@@ -22,31 +22,31 @@ export class Blog {
   @Column({ unique: true })
   slug: string;
 
-  @Column({ type: 'text' })
+  @Column({ type: "text" })
   content: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   excerpt?: string;
 
-  @Column({ name: 'author_id', nullable: true })
+  @Column({ name: "author_id", nullable: true })
   authorId?: string;
 
-  @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
-  @JoinColumn({ name: 'author_id' })
+  @ManyToOne(() => User, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "author_id" })
   author?: User;
 
-  @Column({ name: 'featured_image', nullable: true })
+  @Column({ name: "featured_image", nullable: true })
   featuredImage?: string;
 
-  @Column({ name: 'published_at', nullable: true })
+  @Column({ name: "published_at", nullable: true })
   publishedAt?: Date;
 
-  @Column({ name: 'is_published', default: false })
+  @Column({ name: "is_published", default: false })
   isPublished: boolean;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: "created_at" })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updated_at' })
+  @UpdateDateColumn({ name: "updated_at" })
   updatedAt: Date;
 }
