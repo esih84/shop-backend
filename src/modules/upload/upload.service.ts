@@ -36,6 +36,7 @@ export class UploadService {
   }
 
   private getUrl(key: string): string {
+    console.log(this.cdnUrl);
     return this.cdnUrl
       ? `${this.cdnUrl}/${key}`
       : `https://${this.bucket}.s3.amazonaws.com/${key}`;
@@ -54,6 +55,7 @@ export class UploadService {
         ContentType: contentType,
       }),
     );
+
     return this.getUrl(key);
   }
 

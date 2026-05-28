@@ -6,23 +6,28 @@ import {
   ParseFilePipe,
   MaxFileSizeValidator,
   FileTypeValidator,
-} from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
-import { memoryStorage } from 'multer';
-import { UploadService } from './upload.service';
-import { Roles, Role } from '../../common/decorators/roles.decorator';
+} from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiTags } from "@nestjs/swagger";
+import { memoryStorage } from "multer";
+import { UploadService } from "./upload.service";
+import { Roles, Role } from "../../common/decorators/roles.decorator";
+import { FileUploadDto } from "./dto/upload.dto";
 
-@ApiTags('upload')
-@ApiBearerAuth('access-token')
+@ApiTags("upload")
+@ApiBearerAuth("access-token")
 @Roles(Role.ADMIN)
-@Controller('upload')
+@Controller("upload")
 export class UploadController {
   constructor(private readonly uploadService: UploadService) {}
 
-  @Post('image')
-  @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  @Post("image")
+  @ApiConsumes("multipart/form-data")
+  @ApiBody({
+    description: "Image file to upload",
+    type: FileUploadDto,
+  })
+  @UseInterceptors(FileInterceptor("file", { storage: memoryStorage() }))
   uploadImage(
     @UploadedFile(
       new ParseFilePipe({
@@ -34,6 +39,7 @@ export class UploadController {
     )
     file: Express.Multer.File,
   ) {
+    console.log(file);
     return this.uploadService.uploadImage(file);
   }
 }
