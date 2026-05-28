@@ -50,7 +50,7 @@ export class AuthService {
       { verified: true },
     );
 
-    const otpLength = this.configService.get<number>("app.otpLength", 6);
+    const otpLength = this.configService.get<number>("app.otpLength", 5);
     const code = Math.floor(Math.random() * Math.pow(10, otpLength))
       .toString()
       .padStart(otpLength, "0");

@@ -1,22 +1,26 @@
-import { IsString, Matches, Length } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsString, Matches, Length } from "class-validator";
+import { ApiProperty } from "@nestjs/swagger";
 
 export class SendOtpDto {
-  @ApiProperty({ example: '+989123456789' })
+  @ApiProperty({ example: "09123456789" })
   @IsString()
-  @Matches(/^\+?[1-9]\d{9,14}$/, { message: 'Invalid phone number format' })
+  @Matches(/^09\d{9}$/, {
+    message: "شماره موبایل وارد شده معتبر نیست. نمونه: 09123456789",
+  })
   phone: string;
 }
 
 export class VerifyOtpDto {
-  @ApiProperty({ example: '+989123456789' })
+  @ApiProperty({ example: "09123456789" })
   @IsString()
-  @Matches(/^\+?[1-9]\d{9,14}$/, { message: 'Invalid phone number format' })
+  @Matches(/^09\d{9}$/, {
+    message: "شماره موبایل وارد شده معتبر نیست. نمونه: 09123456789",
+  })
   phone: string;
 
-  @ApiProperty({ example: '123456' })
+  @ApiProperty({ example: "123456" })
   @IsString()
-  @Length(4, 8)
+  @Length(5, 5)
   code: string;
 }
 
