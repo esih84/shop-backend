@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { TreeRepository } from 'typeorm';
-import { Category } from './entities/category.entity';
-import { CreateCategoryDto } from './dto/create-category.dto';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { TreeRepository } from "typeorm";
+import { Category } from "./entities/category.entity";
+import { CreateCategoryDto } from "./dto/create-category.dto";
+//TODO : add category api for get home category
 
 @Injectable()
 export class CategoriesService {
@@ -30,13 +31,13 @@ export class CategoriesService {
 
   async findById(id: string): Promise<Category> {
     const category = await this.categoryRepository.findOne({ where: { id } });
-    if (!category) throw new NotFoundException('Category not found');
+    if (!category) throw new NotFoundException("Category not found");
     return category;
   }
 
   async findBySlug(slug: string): Promise<Category> {
     const category = await this.categoryRepository.findOne({ where: { slug } });
-    if (!category) throw new NotFoundException('Category not found');
+    if (!category) throw new NotFoundException("Category not found");
     return category;
   }
 

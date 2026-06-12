@@ -1,8 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThanOrEqual, MoreThanOrEqual, IsNull } from 'typeorm';
-import { Banner } from './entities/banner.entity';
-import { CreateBannerDto } from './dto/banner.dto';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository, LessThanOrEqual, MoreThanOrEqual, IsNull, In } from "typeorm";
+import { Banner } from "./entities/banner.entity";
+import { CreateBannerDto } from "./dto/banner.dto";
 
 @Injectable()
 export class BannersService {
@@ -11,11 +11,19 @@ export class BannersService {
     private readonly bannerRepository: Repository<Banner>,
   ) {}
 
-  async findActive(): Promise<Banner[]> {
-    const now = new Date();
+ async findActive(positions?: string[]): Promise<Banner[]> {
+    const where: any = { isActive: true };
+
+    if (positions && positions.length > 0) {
+      where.position = In(positions);
+    }
+
     return this.bannerRepository.find({
-      where: { isActive: true },
-      order: { order: 'ASC' },
+      where,
+      order: {
+        order: 'ASC',
+        createdAt: 'DESC',
+      },
     });
   }
 
@@ -25,7 +33,7 @@ export class BannersService {
 
   async update(id: string, dto: Partial<CreateBannerDto>): Promise<Banner> {
     const banner = await this.bannerRepository.findOne({ where: { id } });
-    if (!banner) throw new NotFoundException('Banner not found');
+    if (!banner) throw new NotFoundException("Banner not found");
     await this.bannerRepository.update(id, dto);
     return { ...banner, ...dto } as Banner;
   }
