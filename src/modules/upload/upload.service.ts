@@ -25,6 +25,9 @@ export class UploadService {
   constructor(private readonly configService: ConfigService) {
     this.s3 = new S3Client({
       region: this.configService.get<string>("aws.region") ?? "default",
+      endpoint: this.configService.get<string>("aws.endpoint"),
+
+      forcePathStyle: true,
       credentials: {
         accessKeyId: this.configService.get<string>("aws.accessKeyId") ?? "",
         secretAccessKey:
@@ -32,22 +35,19 @@ export class UploadService {
       },
     });
     this.bucket = this.configService.get<string>("aws.s3BucketImages") ?? "";
-    this.cdnUrl = this.configService.get<string>("aws.cloudfrontUrl") ?? "";
   }
 
   private getUrl(key: string): string {
-    console.log(this.cdnUrl);
-    return this.cdnUrl
-      ? `${this.cdnUrl}/${key}`
-      : `https://${this.bucket}.s3.amazonaws.com/${key}`;
+    return `${this.bucket}.${this.configService.get<string>(
+      "aws.endpoint",
+    )}//${key}`;
   }
-
   private async uploadBuffer(
     buffer: Buffer,
     key: string,
     contentType = "image/webp",
   ): Promise<string> {
-    await this.s3.send(
+    const result = await this.s3.send(
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: key,
@@ -55,7 +55,7 @@ export class UploadService {
         ContentType: contentType,
       }),
     );
-
+    console.log(result);
     return this.getUrl(key);
   }
 
@@ -94,6 +94,11 @@ export class UploadService {
     };
   }
 
+  async uploadImages(
+    files: Express.Multer.File[],
+  ): Promise<UploadedImageUrls[]> {
+    return Promise.all(files.map((file) => this.uploadImage(file)));
+  }
   async deleteImage(key: string): Promise<void> {
     await this.s3.send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),

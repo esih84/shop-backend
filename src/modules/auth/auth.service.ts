@@ -151,7 +151,7 @@ export class AuthService {
       secret: this.configService.get<string>("jwt.secret"),
       // Cast to any here to satisfy the strict StringValue type
       expiresIn:
-        (this.configService.get<string>("jwt.expiresIn") as any) || "15m",
+        (this.configService.get<string>("jwt.expiresIn") as any) || "1y",
     });
 
     const refreshToken = this.jwtService.sign(payload, {

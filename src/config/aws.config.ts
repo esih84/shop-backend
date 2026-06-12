@@ -5,5 +5,5 @@ export default registerAs("aws", () => ({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
   s3BucketImages: process.env.AWS_S3_BUCKET_IMAGES || "",
-  cloudfrontUrl: process.env.AWS_CLOUDFRONT_URL || "",
+  endpoint: process.env.AWS_S3_ENDPOINT || "",
 }));
