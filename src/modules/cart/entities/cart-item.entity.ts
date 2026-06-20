@@ -8,7 +8,7 @@ import {
   CreateDateColumn,
 } from 'typeorm';
 import { Cart } from './cart.entity';
-import { ProductVariant } from '../../products/entities/product-variant.entity';
+import { Product } from '../../products/entities/product.entity';
 
 @Entity('cart_items')
 export class CartItem {
@@ -23,12 +23,12 @@ export class CartItem {
   @JoinColumn({ name: 'cart_id' })
   cart: Cart;
 
-  @Column({ name: 'variant_id' })
-  variantId: string;
+  @Column({ name: 'product_id' })
+  productId: string;
 
-  @ManyToOne(() => ProductVariant, { onDelete: 'CASCADE', eager: true })
-  @JoinColumn({ name: 'variant_id' })
-  variant: ProductVariant;
+  @ManyToOne(() => Product, { onDelete: 'CASCADE', eager: true })
+  @JoinColumn({ name: 'product_id' })
+  product: Product;
 
   @Column({ type: 'int', default: 1 })
   quantity: number;

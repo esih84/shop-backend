@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { paginated } from '../../common/dto/paginated-result';
 
 @Injectable()
 export class UsersService {
@@ -29,7 +30,7 @@ export class UsersService {
       take: limit,
       order: { createdAt: 'DESC' },
     });
-    return { users, total, page, limit };
+    return paginated(users, total, page, limit);
   }
 
   async deactivate(id: string): Promise<void> {

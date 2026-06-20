@@ -7,12 +7,25 @@ import {
   Body,
   Param,
   Query,
+  UseInterceptors,
+  UploadedFiles,
 } from "@nestjs/common";
-import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { FileFieldsInterceptor } from "@nestjs/platform-express";
+import { memoryStorage } from "multer";
+import { ApiBearerAuth, ApiTags, ApiConsumes } from "@nestjs/swagger";
 import { BannersService } from "./banners.service";
+import type { BannerImageFiles } from "./banners.service";
 import { CreateBannerDto } from "./dto/banner.dto";
 import { Roles, Role } from "../../common/decorators/roles.decorator";
 import { Public } from "../../common/decorators/public.decorator";
+
+const bannerImageFields = FileFieldsInterceptor(
+  [
+    { name: "image", maxCount: 1 },
+    { name: "mobileImage", maxCount: 1 },
+  ],
+  { storage: memoryStorage() },
+);
 
 @ApiTags("banners")
 @Controller("banners")
@@ -31,15 +44,26 @@ export class BannersController {
   @Post()
   @Roles(Role.ADMIN)
   @ApiBearerAuth("access-token")
-  create(@Body() dto: CreateBannerDto) {
-    return this.bannersService.create(dto);
+  @ApiConsumes("multipart/form-data", "application/json")
+  @UseInterceptors(bannerImageFields)
+  create(
+    @Body() dto: CreateBannerDto,
+    @UploadedFiles() files?: BannerImageFiles,
+  ) {
+    return this.bannersService.create(dto, files);
   }
 
   @Put(":id")
   @Roles(Role.ADMIN)
   @ApiBearerAuth("access-token")
-  update(@Param("id") id: string, @Body() dto: Partial<CreateBannerDto>) {
-    return this.bannersService.update(id, dto);
+  @ApiConsumes("multipart/form-data", "application/json")
+  @UseInterceptors(bannerImageFields)
+  update(
+    @Param("id") id: string,
+    @Body() dto: Partial<CreateBannerDto>,
+    @UploadedFiles() files?: BannerImageFiles,
+  ) {
+    return this.bannersService.update(id, dto, files);
   }
 
   @Delete(":id")

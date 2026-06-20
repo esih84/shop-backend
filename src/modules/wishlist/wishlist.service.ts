@@ -21,24 +21,19 @@ export class WishlistService {
         product: {
           images: true, // This handles the nested relation 'product.images'
         },
-        variant: true,
       },
       order: { addedAt: "DESC" },
     });
   }
 
-  async addItem(
-    userId: string,
-    productId: string,
-    variantId?: string,
-  ): Promise<Wishlist> {
+  async addItem(userId: string, productId: string): Promise<Wishlist> {
     const exists = await this.wishlistRepository.findOne({
-      where: { userId, productId, ...(variantId ? { variantId } : {}) },
+      where: { userId, productId },
     });
     if (exists) throw new ConflictException("Item already in wishlist");
 
     return this.wishlistRepository.save(
-      this.wishlistRepository.create({ userId, productId, variantId }),
+      this.wishlistRepository.create({ userId, productId }),
     );
   }
 

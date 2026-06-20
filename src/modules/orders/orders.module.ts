@@ -6,7 +6,7 @@ import { Order } from './entities/order.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { Cart } from '../cart/entities/cart.entity';
 import { CartItem } from '../cart/entities/cart-item.entity';
-import { ProductVariant } from '../products/entities/product-variant.entity';
+import { Product } from '../products/entities/product.entity';
 import { Coupon } from '../coupons/entities/coupon.entity';
 import { CouponUsage } from '../coupons/entities/coupon-usage.entity';
 import { UserLoyalty } from '../loyalty/entities/user-loyalty.entity';
@@ -15,7 +15,7 @@ import { PointTransaction } from '../loyalty/entities/point-transaction.entity';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      Order, OrderItem, Cart, CartItem, ProductVariant,
+      Order, OrderItem, Cart, CartItem, Product,
       Coupon, CouponUsage, UserLoyalty, PointTransaction,
     ]),
   ],

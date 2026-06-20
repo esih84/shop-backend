@@ -4,6 +4,7 @@ import { Repository } from "typeorm";
 import { Blog } from "./entities/blog.entity";
 import { CreateBlogDto } from "./dto/blog.dto";
 import { User } from "../users/entities/user.entity";
+import { paginated } from "../../common/dto/paginated-result";
 
 @Injectable()
 export class BlogsService {
@@ -28,7 +29,7 @@ export class BlogsService {
       skip: (page - 1) * limit,
       take: limit,
     });
-    return { blogs, total, page, limit };
+    return paginated(blogs, total, page, limit);
   }
 
   async findBySlug(slug: string): Promise<Blog> {

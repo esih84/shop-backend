@@ -8,6 +8,7 @@ import { Repository } from "typeorm";
 import { Review } from "./entities/review.entity";
 import { CreateReviewDto } from "./dto/review.dto";
 import { User } from "../users/entities/user.entity";
+import { paginated } from "../../common/dto/paginated-result";
 
 @Injectable()
 export class ReviewsService {
@@ -32,7 +33,18 @@ export class ReviewsService {
       skip: (page - 1) * limit,
       take: limit,
     });
-    return { reviews, total, page, limit };
+    return paginated(reviews, total, page, limit);
+  }
+
+  /** لیست همه‌ی نظرات (ادمین) */
+  async findAllForAdmin(page = 1, limit = 50) {
+    const [reviews, total] = await this.reviewRepository.findAndCount({
+      relations: { user: true, product: true },
+      order: { createdAt: "DESC" },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    return paginated(reviews, total, page, limit);
   }
 
   async getAverageRating(

@@ -7,7 +7,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { Cart } from "./entities/cart.entity";
 import { CartItem } from "./entities/cart-item.entity";
-import { ProductVariant } from "../products/entities/product-variant.entity";
+import { Product } from "../products/entities/product.entity";
 import { AddCartItemDto, UpdateCartItemDto } from "./dto/cart.dto";
 import { User } from "../users/entities/user.entity";
 
@@ -18,8 +18,8 @@ export class CartService {
     private readonly cartRepository: Repository<Cart>,
     @InjectRepository(CartItem)
     private readonly cartItemRepository: Repository<CartItem>,
-    @InjectRepository(ProductVariant)
-    private readonly variantRepository: Repository<ProductVariant>,
+    @InjectRepository(Product)
+    private readonly productRepository: Repository<Product>,
   ) {}
 
   async getOrCreateCart(userId: string): Promise<Cart> {
@@ -27,9 +27,7 @@ export class CartService {
       where: { userId },
       relations: {
         items: {
-          variant: {
-            product: true,
-          },
+          product: { images: true },
         },
       },
     });
@@ -46,21 +44,21 @@ export class CartService {
   }
 
   async addItem(user: User, dto: AddCartItemDto): Promise<Cart> {
-    const variant = await this.variantRepository.findOne({
-      where: { id: dto.variantId, isActive: true },
+    const product = await this.productRepository.findOne({
+      where: { id: dto.productId, isActive: true },
     });
-    if (!variant) throw new NotFoundException("Product variant not found");
-    if (variant.stock < dto.quantity) {
-      throw new BadRequestException(`Only ${variant.stock} items in stock`);
+    if (!product) throw new NotFoundException("Product not found");
+    if (product.stock < dto.quantity) {
+      throw new BadRequestException(`Only ${product.stock} items in stock`);
     }
 
     const cart = await this.getOrCreateCart(user.id);
 
-    const existingItem = cart.items?.find((i) => i.variantId === dto.variantId);
+    const existingItem = cart.items?.find((i) => i.productId === dto.productId);
     if (existingItem) {
       const newQty = existingItem.quantity + dto.quantity;
-      if (variant.stock < newQty) {
-        throw new BadRequestException(`Only ${variant.stock} items in stock`);
+      if (product.stock < newQty) {
+        throw new BadRequestException(`Only ${product.stock} items in stock`);
       }
       await this.cartItemRepository.update(existingItem.id, {
         quantity: newQty,
@@ -83,11 +81,11 @@ export class CartService {
     const item = cart.items?.find((i) => i.id === itemId);
     if (!item) throw new NotFoundException("Cart item not found");
 
-    const variant = await this.variantRepository.findOne({
-      where: { id: item.variantId },
+    const product = await this.productRepository.findOne({
+      where: { id: item.productId },
     });
-    if (variant && variant.stock < dto.quantity) {
-      throw new BadRequestException(`Only ${variant.stock} items in stock`);
+    if (product && product.stock < dto.quantity) {
+      throw new BadRequestException(`Only ${product.stock} items in stock`);
     }
 
     await this.cartItemRepository.update(itemId, { quantity: dto.quantity });

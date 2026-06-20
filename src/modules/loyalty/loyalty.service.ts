@@ -8,6 +8,7 @@ import {
   PointTransactionType,
 } from "./entities/point-transaction.entity";
 import { CreateLoyaltyTierDto } from "./dto/loyalty.dto";
+import { paginated } from "../../common/dto/paginated-result";
 
 @Injectable()
 export class LoyaltyService {
@@ -117,6 +118,6 @@ export class LoyaltyService {
       skip: (page - 1) * limit,
       take: limit,
     });
-    return { transactions, total, page, limit };
+    return paginated(transactions, total, page, limit);
   }
 }

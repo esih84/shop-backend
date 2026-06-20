@@ -21,9 +21,6 @@ export class ProductImage {
   @JoinColumn({ name: 'product_id' })
   product: Product;
 
-  @Column({ name: 'variant_id', nullable: true })
-  variantId?: string;
-
   @Column()
   url: string;
 

@@ -3,6 +3,7 @@ import { ValidationPipe, VersioningType } from "@nestjs/common";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
 import { ConfigService } from "@nestjs/config";
 import compression from "compression";
+import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import { AppModule } from "./app.module";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
@@ -29,6 +30,9 @@ async function bootstrap() {
 
   // Compression
   app.use(compression());
+
+  // Cookie parsing (httpOnly auth cookies)
+  app.use(cookieParser());
 
   // Global prefix
   app.setGlobalPrefix("api");

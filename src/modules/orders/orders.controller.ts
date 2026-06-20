@@ -30,6 +30,20 @@ export class OrdersController {
     return this.ordersService.findUserOrders(user.id, page, limit);
   }
 
+  @Get('admin/all')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'List all orders (admin)' })
+  findAllAdmin(@Query('page') page = 1, @Query('limit') limit = 20) {
+    return this.ordersService.findAllOrders(Number(page), Number(limit));
+  }
+
+  @Get('admin/:id')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Get any order details (admin)' })
+  findOneAdmin(@Param('id') id: string) {
+    return this.ordersService.findById(id);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get order details' })
   findOne(@CurrentUser() user: User, @Param('id') id: string) {

@@ -47,7 +47,7 @@ export class UploadService {
     key: string,
     contentType = "image/webp",
   ): Promise<string> {
-    const result = await this.s3.send(
+    await this.s3.send(
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: key,
@@ -55,13 +55,15 @@ export class UploadService {
         ContentType: contentType,
       }),
     );
-    console.log(result);
     return this.getUrl(key);
   }
 
-  async uploadImage(file: Express.Multer.File): Promise<UploadedImageUrls> {
+  async uploadImage(
+    file: Express.Multer.File,
+    folder = "products",
+  ): Promise<UploadedImageUrls> {
     const id = uuidv4();
-    const prefix = `products/${id}`;
+    const prefix = `${folder}/${id}`;
 
     const [thumbnail, medium, large, original] = await Promise.all([
       sharp(file.buffer)
@@ -96,8 +98,9 @@ export class UploadService {
 
   async uploadImages(
     files: Express.Multer.File[],
+    folder = "products",
   ): Promise<UploadedImageUrls[]> {
-    return Promise.all(files.map((file) => this.uploadImage(file)));
+    return Promise.all(files.map((file) => this.uploadImage(file, folder)));
   }
   async deleteImage(key: string): Promise<void> {
     await this.s3.send(

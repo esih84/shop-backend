@@ -9,7 +9,6 @@ import {
 } from "typeorm";
 import { User } from "../../users/entities/user.entity";
 import { Product } from "../../products/entities/product.entity";
-import { ProductVariant } from "../../products/entities/product-variant.entity";
 
 @Entity("wishlists")
 export class Wishlist {
@@ -31,17 +30,6 @@ export class Wishlist {
   @ManyToOne(() => Product, { onDelete: "CASCADE", eager: true })
   @JoinColumn({ name: "product_id" })
   product: Product;
-
-  @Column({ name: "variant_id", nullable: true })
-  variantId?: string;
-
-  @ManyToOne(() => ProductVariant, {
-    nullable: true,
-    onDelete: "SET NULL",
-    eager: true,
-  })
-  @JoinColumn({ name: "variant_id" })
-  variant?: ProductVariant;
 
   @CreateDateColumn({ name: "added_at" })
   addedAt: Date;

@@ -14,7 +14,12 @@ export class CreateBannerDto {
   @IsString()
   description?: string;
 
-  @ApiProperty() @IsString() imageUrl: string;
+  @ApiPropertyOptional({
+    description: 'در صورت آپلود فایل تصویر، نیازی به ارسال این فیلد نیست',
+  })
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() mobileImageUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() link?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() position?: string;

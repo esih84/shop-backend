@@ -10,7 +10,6 @@ import {
   Index,
 } from 'typeorm';
 import { Category } from '../../categories/entities/category.entity';
-import { ProductVariant } from './product-variant.entity';
 import { ProductImage } from './product-image.entity';
 import { ProductAttribute } from './product-attribute.entity';
 import { Discount } from './discount.entity';
@@ -41,6 +40,13 @@ export class Product {
   })
   basePrice: number;
 
+  @Column({ type: 'int', default: 0 })
+  stock: number;
+
+  @Index()
+  @Column({ unique: true, nullable: true })
+  sku?: string;
+
   @Index()
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
@@ -52,9 +58,6 @@ export class Product {
   @ManyToOne(() => Category, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'category_id' })
   category?: Category;
-
-  @OneToMany(() => ProductVariant, (v) => v.product, { cascade: true })
-  variants: ProductVariant[];
 
   @OneToMany(() => ProductImage, (i) => i.product, { cascade: true })
   images: ProductImage[];

@@ -4,13 +4,21 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import type { Request } from 'express';
 import { User } from '../../users/entities/user.entity';
+import { ACCESS_TOKEN_COOKIE } from '../auth.cookies';
 
 interface JwtPayload {
   sub: string;
   phone: string;
   role: string;
 }
+
+/** توکن را اول از کوکی httpOnly و در صورت نبود از هدر Bearer می‌خواند. */
+const extractJwt = ExtractJwt.fromExtractors([
+  (req: Request) => req?.cookies?.[ACCESS_TOKEN_COOKIE] ?? null,
+  ExtractJwt.fromAuthHeaderAsBearerToken(),
+]);
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -20,7 +28,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly userRepository: Repository<User>,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: extractJwt,
       ignoreExpiration: false,
       secretOrKey: configService.get<string>('jwt.secret', 'secret'),
     });

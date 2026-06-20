@@ -21,14 +21,11 @@ export class OrderItem {
   @JoinColumn({ name: 'order_id' })
   order: Order;
 
-  @Column({ name: 'variant_id', nullable: true })
-  variantId?: string;
+  @Column({ name: 'product_id', nullable: true })
+  productId?: string;
 
   @Column({ name: 'product_name' })
   productName: string;
-
-  @Column({ name: 'variant_details', type: 'jsonb', nullable: true })
-  variantDetails?: Record<string, unknown>;
 
   @Column({ type: 'int', default: 1 })
   quantity: number;

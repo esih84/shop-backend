@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Coupon, CouponType } from './entities/coupon.entity';
 import { CouponUsage } from './entities/coupon-usage.entity';
 import { CreateCouponDto, ValidateCouponDto } from './dto/coupon.dto';
+import { paginated } from '../../common/dto/paginated-result';
 
 @Injectable()
 export class CouponsService {
@@ -23,7 +24,7 @@ export class CouponsService {
       skip: (page - 1) * limit,
       take: limit,
     });
-    return { coupons, total, page, limit };
+    return paginated(coupons, total, page, limit);
   }
 
   async validate(userId: string, dto: ValidateCouponDto): Promise<{ discount: number; coupon: Coupon }> {

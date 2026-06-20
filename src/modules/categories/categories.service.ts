@@ -3,17 +3,25 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { TreeRepository } from "typeorm";
 import { Category } from "./entities/category.entity";
 import { CreateCategoryDto } from "./dto/create-category.dto";
-//TODO : add category api for get home category
+import { UploadService } from "../upload/upload.service";
 
 @Injectable()
 export class CategoriesService {
   constructor(
     @InjectRepository(Category)
     private readonly categoryRepository: TreeRepository<Category>,
+    private readonly uploadService: UploadService,
   ) {}
 
-  async create(dto: CreateCategoryDto): Promise<Category> {
+  async create(
+    dto: CreateCategoryDto,
+    image?: Express.Multer.File,
+  ): Promise<Category> {
     const category = this.categoryRepository.create(dto);
+    if (image) {
+      const urls = await this.uploadService.uploadImage(image, "categories");
+      category.imageUrl = urls.large;
+    }
     if (dto.parentId) {
       const parent = await this.findById(dto.parentId);
       category.parent = parent;
@@ -41,8 +49,16 @@ export class CategoriesService {
     return category;
   }
 
-  async update(id: string, dto: Partial<CreateCategoryDto>): Promise<Category> {
+  async update(
+    id: string,
+    dto: Partial<CreateCategoryDto>,
+    image?: Express.Multer.File,
+  ): Promise<Category> {
     await this.findById(id);
+    if (image) {
+      const urls = await this.uploadService.uploadImage(image, "categories");
+      dto.imageUrl = urls.large;
+    }
     await this.categoryRepository.update(id, dto);
     return this.findById(id);
   }

@@ -19,6 +19,14 @@ export class ReviewsController {
     return this.reviewsService.create(user, dto);
   }
 
+  @Get('admin/all')
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'List all reviews (admin)' })
+  findAllAdmin(@Query('page') page = 1, @Query('limit') limit = 50) {
+    return this.reviewsService.findAllForAdmin(Number(page), Number(limit));
+  }
+
   @Get('product/:productId')
   @Public()
   @ApiOperation({ summary: 'Get reviews for a product' })

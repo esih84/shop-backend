@@ -6,6 +6,9 @@ import { CacheModule } from "@nestjs/cache-manager";
 import { BullModule } from "@nestjs/bullmq";
 import { createKeyv } from "@keyv/redis";
 
+// Redis اختیاری: بدون REDIS_ENABLED=true، صف‌ها register نمی‌شوند و cache روی حافظه است.
+const REDIS_ENABLED = process.env.REDIS_ENABLED === "true";
+
 import appConfig from "./config/app.config";
 import databaseConfig from "./config/database.config";
 import redisConfig from "./config/redis.config";
@@ -17,7 +20,6 @@ import { User } from "./modules/users/entities/user.entity";
 import { Otp } from "./modules/auth/entities/otp.entity";
 import { Category } from "./modules/categories/entities/category.entity";
 import { Product } from "./modules/products/entities/product.entity";
-import { ProductVariant } from "./modules/products/entities/product-variant.entity";
 import { ProductImage } from "./modules/products/entities/product-image.entity";
 import { ProductAttribute } from "./modules/products/entities/product-attribute.entity";
 import { Discount } from "./modules/products/entities/discount.entity";
@@ -82,7 +84,6 @@ import { UploadModule } from "./modules/upload/upload.module";
           Otp,
           Category,
           Product,
-          ProductVariant,
           ProductImage,
           ProductAttribute,
           Discount,
@@ -113,38 +114,48 @@ import { UploadModule } from "./modules/upload/upload.module";
       }),
     }),
 
-    // Cache (Redis)
+    // Cache — اگر Redis فعال باشد از Redis، در غیر این صورت حافظه‌ی محلی
     CacheModule.registerAsync({
       isGlobal: true,
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        stores: [
-          createKeyv(
-            `redis://${config.get("redis.password") ? `:${config.get("redis.password")}@` : ""}${config.get("redis.host")}:${config.get("redis.port")}/${config.get("redis.db")}`,
-          ),
-        ],
-        ttl: 3600000,
-      }),
+      useFactory: (config: ConfigService): any => {
+        if (config.get("redis.enabled")) {
+          return {
+            stores: [
+              createKeyv(
+                `redis://${config.get("redis.password") ? `:${config.get("redis.password")}@` : ""}${config.get("redis.host")}:${config.get("redis.port")}/${config.get("redis.db")}`,
+              ),
+            ],
+            ttl: 3600000,
+          };
+        }
+        // حافظه‌ی محلی (بدون نیاز به Redis)
+        return { ttl: 3600000 };
+      },
     }),
 
-    // Bull Queue
-    BullModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        connection: {
-          host: config.get("redis.host"),
-          port: config.get<number>("redis.port"),
-          password: config.get("redis.password") || undefined,
-          db: config.get<number>("redis.db"),
-        },
-        defaultJobOptions: {
-          removeOnComplete: 100,
-          removeOnFail: 50,
-          attempts: 3,
-          backoff: { type: "exponential", delay: 1000 },
-        },
-      }),
-    }),
+    // Bull Queue — فقط وقتی Redis فعال است (در حال حاضر صفی مصرف نمی‌شود)
+    ...(REDIS_ENABLED
+      ? [
+          BullModule.forRootAsync({
+            inject: [ConfigService],
+            useFactory: (config: ConfigService) => ({
+              connection: {
+                host: config.get("redis.host"),
+                port: config.get<number>("redis.port"),
+                password: config.get("redis.password") || undefined,
+                db: config.get<number>("redis.db"),
+              },
+              defaultJobOptions: {
+                removeOnComplete: 100,
+                removeOnFail: 50,
+                attempts: 3,
+                backoff: { type: "exponential", delay: 1000 },
+              },
+            }),
+          }),
+        ]
+      : []),
 
     // Rate Limiting
     ThrottlerModule.forRootAsync({

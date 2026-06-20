@@ -9,7 +9,7 @@ import { Order, OrderStatus } from "./entities/order.entity";
 import { OrderItem } from "./entities/order-item.entity";
 import { Cart } from "../cart/entities/cart.entity";
 import { CartItem } from "../cart/entities/cart-item.entity";
-import { ProductVariant } from "../products/entities/product-variant.entity";
+import { Product } from "../products/entities/product.entity";
 import { Coupon, CouponType } from "../coupons/entities/coupon.entity";
 import { CouponUsage } from "../coupons/entities/coupon-usage.entity";
 import { UserLoyalty } from "../loyalty/entities/user-loyalty.entity";
@@ -19,6 +19,7 @@ import {
 } from "../loyalty/entities/point-transaction.entity";
 import { CreateOrderDto } from "./dto/order.dto";
 import { User } from "../users/entities/user.entity";
+import { paginated } from "../../common/dto/paginated-result";
 
 @Injectable()
 export class OrdersService {
@@ -27,8 +28,8 @@ export class OrdersService {
     private readonly orderRepository: Repository<Order>,
     @InjectRepository(Cart)
     private readonly cartRepository: Repository<Cart>,
-    @InjectRepository(ProductVariant)
-    private readonly variantRepository: Repository<ProductVariant>,
+    @InjectRepository(Product)
+    private readonly productRepository: Repository<Product>,
     @InjectRepository(Coupon)
     private readonly couponRepository: Repository<Coupon>,
     @InjectRepository(CouponUsage)
@@ -43,7 +44,7 @@ export class OrdersService {
   async createFromCart(user: User, dto: CreateOrderDto): Promise<Order> {
     const cart = await this.cartRepository.findOne({
       where: { userId: user.id },
-      relations: { items: { variant: { product: true } } },
+      relations: { items: { product: true } },
     });
 
     if (!cart?.items?.length) {
@@ -57,41 +58,36 @@ export class OrdersService {
 
       // Validate stock and calculate total
       for (const item of cart.items) {
-        const variant = await manager.findOne(ProductVariant, {
-          where: { id: item.variantId },
+        const product = await manager.findOne(Product, {
+          where: { id: item.productId },
           lock: { mode: "pessimistic_write" },
         });
 
-        if (!variant || !variant.isActive) {
+        if (!product || !product.isActive) {
           throw new BadRequestException(
-            `Variant ${item.variantId} is no longer available`,
+            `Product ${item.productId} is no longer available`,
           );
         }
-        if (variant.stock < item.quantity) {
+        if (product.stock < item.quantity) {
           throw new BadRequestException(
-            `Insufficient stock for ${variant.sku}`,
+            `Insufficient stock for ${product.name}`,
           );
         }
 
-        const itemTotal = Number(variant.price) * item.quantity;
+        const itemTotal = Number(product.basePrice) * item.quantity;
         totalAmount += itemTotal;
 
         orderItems.push({
-          variantId: variant.id,
-          productName: item.variant?.product?.name ?? variant.sku,
-          variantDetails: {
-            color: variant.color,
-            size: variant.size,
-            sku: variant.sku,
-          },
+          productId: product.id,
+          productName: product.name,
           quantity: item.quantity,
-          unitPrice: Number(variant.price),
+          unitPrice: Number(product.basePrice),
           totalPrice: itemTotal,
         });
 
         // Reduce stock
-        await manager.update(ProductVariant, variant.id, {
-          stock: variant.stock - item.quantity,
+        await manager.update(Product, product.id, {
+          stock: product.stock - item.quantity,
         });
       }
 
@@ -194,7 +190,18 @@ export class OrdersService {
       skip: (page - 1) * limit,
       take: limit,
     });
-    return { orders, total, page, limit };
+    return paginated(orders, total, page, limit);
+  }
+
+  /** لیست همه‌ی سفارش‌ها (ادمین) */
+  async findAllOrders(page = 1, limit = 20) {
+    const [orders, total] = await this.orderRepository.findAndCount({
+      relations: { items: true, user: true },
+      order: { createdAt: "DESC" },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    return paginated(orders, total, page, limit);
   }
 
   async findById(id: string, userId?: string): Promise<Order> {
