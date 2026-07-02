@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Delete,
   Body,
   Param,
@@ -19,7 +20,12 @@ import {
   ApiConsumes,
 } from "@nestjs/swagger";
 import { ProductsService } from "./products.service";
-import { CreateProductDto, FilterProductsDto } from "./dto/product.dto";
+import {
+  CreateProductDto,
+  UpdateProductDto,
+  FilterProductsDto,
+  ReorderImagesDto,
+} from "./dto/product.dto";
 import { Roles, Role } from "../../common/decorators/roles.decorator";
 import { Public } from "../../common/decorators/public.decorator";
 
@@ -39,13 +45,32 @@ export class ProductsController {
     return this.productsService.findAll(filter);
   }
 
+  @Get("admin/all")
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth("access-token")
+  @ApiOperation({
+    summary: "List all products including inactive (admin)",
+  })
+  findAllAdmin(@Query() filter: FilterProductsDto) {
+    return this.productsService.findAll(filter, true);
+  }
+
+  @Get("admin/:id")
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth("access-token")
+  @ApiOperation({
+    summary: "Get a single product by id including inactive (admin)",
+  })
+  findOneAdmin(@Param("id") id: string) {
+    return this.productsService.findByIdAdmin(id);
+  }
+
   @Get(":slug")
   @Public()
   @ApiOperation({ summary: "Get product details by slug" })
   findBySlug(@Param("slug") slug: string) {
     return this.productsService.findBySlug(slug);
   }
-
 
   @Post()
   @Roles(Role.ADMIN)
@@ -57,6 +82,7 @@ export class ProductsController {
     @Body() dto: CreateProductDto,
     @UploadedFiles() images?: Express.Multer.File[],
   ) {
+    console.log(images);
     return this.productsService.create(dto, images);
   }
 
@@ -68,10 +94,28 @@ export class ProductsController {
   @UseInterceptors(productImages)
   update(
     @Param("id") id: string,
-    @Body() dto: CreateProductDto,
+    @Body() dto: UpdateProductDto,
     @UploadedFiles() images?: Express.Multer.File[],
   ) {
+    console.log(images);
+
     return this.productsService.update(id, dto, images);
+  }
+
+  @Patch(":id/images/reorder")
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth("access-token")
+  @ApiOperation({ summary: "Reorder product images (admin)" })
+  reorderImages(@Param("id") id: string, @Body() dto: ReorderImagesDto) {
+    return this.productsService.reorderImages(id, dto.imageIds);
+  }
+
+  @Delete(":id/images/:imageId")
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth("access-token")
+  @ApiOperation({ summary: "Delete a single product image (admin)" })
+  deleteImage(@Param("id") id: string, @Param("imageId") imageId: string) {
+    return this.productsService.deleteImage(id, imageId);
   }
 
   @Delete(":id")

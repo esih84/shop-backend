@@ -1,46 +1,63 @@
 import {
   IsString, IsOptional, IsBoolean, IsNumber, IsUUID, IsArray,
-  ValidateNested, Min,
+  ValidateNested, Min, IsNotEmpty,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-
-/**
- * در حالت multipart/form-data (آپلود همزمان تصاویر)، آرایه‌ها به‌صورت
- * رشته‌ی JSON ارسال می‌شوند. این تابع آن‌ها را به آبجکت تبدیل می‌کند تا
- * اعتبارسنجی nested درست کار کند. در حالت application/json بدون تغییر می‌ماند.
- */
-const parseJsonArray = ({ value }: { value: unknown }) =>
-  typeof value === 'string' ? JSON.parse(value) : value;
-
-/** تبدیل رشته‌های فرم به boolean برای حالت multipart */
-const toBoolean = ({ value }: { value: unknown }) =>
-  value === 'true' || value === true ? true : value === 'false' || value === false ? false : value;
-
-const toNumber = ({ value }: { value: unknown }) =>
-  typeof value === 'string' && value !== '' ? Number(value) : value;
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import {
+  emptyToUndefined,
+  toBoolean,
+  toNumber,
+} from '../../../common/transforms';
 
 export class CreateAttributeDto {
   @ApiProperty() @IsString() key: string;
   @ApiProperty() @IsString() value: string;
 }
 
+/**
+ * attributes را از رشته‌ی JSON (حالت multipart) یا آرایه (حالت JSON) به
+ * نمونه‌های واقعی CreateAttributeDto تبدیل می‌کند. ساختن نمونه‌ی کلاس ضروری است
+ * چون class-validator اعتبارسنجی nested را بر اساس constructor هر آیتم انجام
+ * می‌دهد؛ آبجکت خام (بدون متادیتا) با whitelist خطای «key should not exist» می‌دهد.
+ * ضمناً فقط key/value نگه داشته می‌شود تا فیلدهای اضافی (id/productId) رد شوند.
+ */
+function toAttributeInstances({ value }: { value: unknown }) {
+  let arr: unknown = value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed === '') return undefined;
+    try {
+      arr = JSON.parse(trimmed);
+    } catch {
+      return value;
+    }
+  }
+  if (!Array.isArray(arr)) return arr;
+  return arr.map((item) => {
+    const dto = new CreateAttributeDto();
+    dto.key = (item as { key?: string })?.key as string;
+    dto.value = (item as { value?: string })?.value as string;
+    return dto;
+  });
+}
+
 export class CreateProductDto {
   @ApiProperty() @IsString() name: string;
-  @ApiPropertyOptional({ description: 'در صورت خالی بودن از روی name ساخته می‌شود' })
-  @IsOptional() @IsString() slug?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
+  @ApiProperty({ description: 'اسلاگ یکتا برای آدرس محصول' })
+  @Transform(emptyToUndefined) @IsString() @IsNotEmpty() slug: string;
+  @ApiPropertyOptional() @IsOptional() @Transform(emptyToUndefined) @IsString() description?: string;
   @ApiProperty() @Transform(toNumber) @IsNumber() @Min(0) basePrice: number;
   @ApiPropertyOptional({ description: 'موجودی انبار' })
   @IsOptional() @Transform(toNumber) @IsNumber() @Min(0) stock?: number;
   @ApiPropertyOptional({ description: 'کد محصول (اختیاری، یکتا)' })
-  @IsOptional() @IsString() sku?: string;
-  @ApiPropertyOptional() @IsOptional() @IsUUID() categoryId?: string;
+  @IsOptional() @Transform(emptyToUndefined) @IsString() sku?: string;
+  @ApiPropertyOptional() @IsOptional() @Transform(emptyToUndefined) @IsUUID() categoryId?: string;
   @ApiPropertyOptional() @IsOptional() @Transform(toBoolean) @IsBoolean() isActive?: boolean;
 
   @ApiPropertyOptional({ type: [CreateAttributeDto], description: 'در حالت multipart به‌صورت رشته‌ی JSON ارسال شود' })
   @IsOptional()
-  @Transform(parseJsonArray)
+  @Transform(toAttributeInstances)
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateAttributeDto)
@@ -53,6 +70,37 @@ export class CreateProductDto {
   })
   @IsOptional()
   images?: any;
+}
+
+/**
+ * برای ویرایش: همه‌ی فیلدها optional می‌شوند تا ارسال جزئی (partial) مجاز باشد.
+ * هر فیلدی که فرستاده نشود، مقدار قبلی محصول حفظ می‌گردد (در سرویس).
+ */
+export class UpdateProductDto extends PartialType(CreateProductDto) {
+  // attributes به‌صورت صریح بازتعریف می‌شود چون PartialType دکوراتور
+  // @Type(() => CreateAttributeDto) را برای nested به‌درستی منتقل نمی‌کند و
+  // در نتیجه با whitelist/forbidNonWhitelisted خطای «key should not exist»
+  // برای هر مشخصه رخ می‌دهد.
+  @ApiPropertyOptional({
+    type: [CreateAttributeDto],
+    description: 'در حالت multipart به‌صورت رشته‌ی JSON ارسال شود',
+  })
+  @IsOptional()
+  @Transform(toAttributeInstances)
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateAttributeDto)
+  attributes?: CreateAttributeDto[];
+}
+
+export class ReorderImagesDto {
+  @ApiProperty({
+    type: [String],
+    description: 'شناسه‌ی تصاویر به ترتیب دلخواه (اولین تصویر، تصویر اصلی)',
+  })
+  @IsArray()
+  @IsUUID('all', { each: true })
+  imageIds: string[];
 }
 
 export class FilterProductsDto {

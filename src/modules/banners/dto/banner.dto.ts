@@ -4,9 +4,11 @@ import {
   IsBoolean,
   IsInt,
   IsDate,
+  IsIn,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
+import { BANNER_POSITIONS, type BannerPosition } from "../banner-position";
 
 export class CreateBannerDto {
   @ApiProperty() @IsString() title: string;
@@ -22,7 +24,10 @@ export class CreateBannerDto {
   imageUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() mobileImageUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() link?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() position?: string;
+  @ApiPropertyOptional({ enum: BANNER_POSITIONS })
+  @IsOptional()
+  @IsIn(BANNER_POSITIONS)
+  position?: BannerPosition;
   @ApiPropertyOptional() @IsOptional() @IsInt() order?: number;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isActive?: boolean;
   @ApiPropertyOptional()

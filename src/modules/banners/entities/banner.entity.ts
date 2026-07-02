@@ -26,7 +26,7 @@ export class Banner {
   @Column({ nullable: true })
   link?: string;
 
-  @Column({ default: "home" })
+  @Column({ default: "home_main" })
   position: string;
 
   @Column({ default: 0 })

@@ -20,7 +20,8 @@ export interface UploadedImageUrls {
 export class UploadService {
   private readonly s3: S3Client;
   private readonly bucket: string;
-  private readonly cdnUrl: string;
+  /** پوشه‌ی پایه داخل باکت؛ بدون اسلش ابتدا/انتها */
+  private readonly rootPrefix: string;
 
   constructor(private readonly configService: ConfigService) {
     this.s3 = new S3Client({
@@ -28,6 +29,8 @@ export class UploadService {
       endpoint: this.configService.get<string>("aws.endpoint"),
 
       forcePathStyle: true,
+      // تلاش مجدد در برابر خطاهای گذرای شبکه/DNS (مثل ENOTFOUND)
+      maxAttempts: 4,
       credentials: {
         accessKeyId: this.configService.get<string>("aws.accessKeyId") ?? "",
         secretAccessKey:
@@ -35,12 +38,22 @@ export class UploadService {
       },
     });
     this.bucket = this.configService.get<string>("aws.s3BucketImages") ?? "";
+    this.rootPrefix = (
+      this.configService.get<string>("aws.s3Prefix") ?? ""
+    ).replace(/^\/+|\/+$/g, "");
+  }
+
+  /** کلید کامل داخل باکت را با احتساب پوشه‌ی پایه می‌سازد */
+  private buildKey(path: string): string {
+    return this.rootPrefix ? `${this.rootPrefix}/${path}` : path;
   }
 
   private getUrl(key: string): string {
-    return `${this.bucket}.${this.configService.get<string>(
-      "aws.endpoint",
-    )}//${key}`;
+    // forcePathStyle=true → آدرس عمومی به‌صورت {endpoint}/{bucket}/{key}
+    const endpoint = (
+      this.configService.get<string>("aws.endpoint") ?? ""
+    ).replace(/\/+$/, "");
+    return `${endpoint}/${this.bucket}/${key}`;
   }
   private async uploadBuffer(
     buffer: Buffer,
@@ -53,6 +66,7 @@ export class UploadService {
         Key: key,
         Body: buffer,
         ContentType: contentType,
+        ACL: "public-read", // فایل به‌صورت عمومی قابل دسترسی باشد
       }),
     );
     return this.getUrl(key);
@@ -63,7 +77,7 @@ export class UploadService {
     folder = "products",
   ): Promise<UploadedImageUrls> {
     const id = uuidv4();
-    const prefix = `${folder}/${id}`;
+    const prefix = this.buildKey(`${folder}/${id}`);
 
     const [thumbnail, medium, large, original] = await Promise.all([
       sharp(file.buffer)
