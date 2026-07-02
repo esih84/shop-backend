@@ -7,6 +7,7 @@ import { nanoid } from "nanoid";
 import { Otp } from "./entities/otp.entity";
 import { User } from "../users/entities/user.entity";
 import { SendOtpDto, VerifyOtpDto } from "./dto/auth.dto";
+import { SmsService } from "../sms/sms.service";
 import {
   HttpException,
   HttpStatus,
@@ -23,6 +24,7 @@ export class AuthService {
     private readonly userRepository: Repository<User>,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly smsService: SmsService,
   ) {}
 
   async sendOtp(dto: SendOtpDto): Promise<{ message: string }> {
@@ -65,8 +67,11 @@ export class AuthService {
       this.otpRepository.create({ phone, code, expiresAt }),
     );
 
-    // TODO: Send SMS via SMS service
-    // In development, log the OTP
+    // ارسال کد از طریق سرویس Lookup کاوه‌نگار. اگر تنظیمات پیامک کامل نباشد،
+    // SmsService فقط لاگ می‌کند و خطا نمی‌دهد (مناسب محیط توسعه).
+    await this.smsService.sendOtp(phone, code);
+
+    // در حالت توسعه برای راحتی تست، کد را در کنسول هم چاپ می‌کنیم.
     if (this.configService.get("app.nodeEnv") !== "production") {
       console.log(`OTP for ${phone}: ${code}`);
     }
@@ -151,7 +156,7 @@ export class AuthService {
       secret: this.configService.get<string>("jwt.secret"),
       // Cast to any here to satisfy the strict StringValue type
       expiresIn:
-        (this.configService.get<string>("jwt.expiresIn") as any) || "15m",
+        (this.configService.get<string>("jwt.expiresIn") as any) || "1h",
     });
 
     const refreshToken = this.jwtService.sign(payload, {

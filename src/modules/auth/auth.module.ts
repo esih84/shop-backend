@@ -10,12 +10,14 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Otp } from './entities/otp.entity';
 import { User } from '../users/entities/user.entity';
+import { SmsModule } from '../sms/sms.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Otp, User]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({}),
+    SmsModule,
   ],
   controllers: [AuthController],
   providers: [

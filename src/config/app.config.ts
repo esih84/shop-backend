@@ -31,6 +31,8 @@ export default registerAs("app", () => ({
   smsProvider: process.env.SMS_PROVIDER || "kavenegar",
   smsApiKey: process.env.SMS_API_KEY || "",
   smsSender: process.env.SMS_SENDER || "",
+  // نام قالب (template) تأییدشده در پنل کاوه‌نگار برای ارسال کد یک‌بارمصرف
+  smsTemplate: process.env.SMS_TEMPLATE || "",
 
   // Email
   mailHost: process.env.MAIL_HOST || "smtp.gmail.com",
