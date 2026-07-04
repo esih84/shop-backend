@@ -20,6 +20,7 @@ import {
 import { CreateOrderDto } from "./dto/order.dto";
 import { User } from "../users/entities/user.entity";
 import { paginated } from "../../common/dto/paginated-result";
+import { PetsService } from "../pets/pets.service";
 
 @Injectable()
 export class OrdersService {
@@ -39,6 +40,7 @@ export class OrdersService {
     @InjectRepository(PointTransaction)
     private readonly pointTransactionRepository: Repository<PointTransaction>,
     private readonly dataSource: DataSource,
+    private readonly petsService: PetsService,
   ) {}
 
   async createFromCart(user: User, dto: CreateOrderDto): Promise<Order> {
@@ -51,7 +53,7 @@ export class OrdersService {
       throw new BadRequestException("Cart is empty");
     }
 
-    return this.dataSource.transaction(async (manager) => {
+    const createdOrder = await this.dataSource.transaction(async (manager) => {
       let totalAmount = 0;
       let discountAmount = 0;
       const orderItems: Partial<OrderItem>[] = [];
@@ -175,11 +177,34 @@ export class OrdersService {
         }),
       );
 
+      // ذخیره‌ی نام/نام‌خانوادگی گیرنده روی پروفایل کاربر برای پیش‌پُرکردن سفارش‌های بعدی
+      const sa = dto.shippingAddress;
+      if (sa) {
+        const patch: Partial<User> = {};
+        if (typeof sa.firstName === "string" && sa.firstName.trim())
+          patch.firstName = sa.firstName.trim();
+        if (typeof sa.lastName === "string" && sa.lastName.trim())
+          patch.lastName = sa.lastName.trim();
+        if (Object.keys(patch).length) {
+          await manager.update(User, user.id, patch);
+        }
+      }
+
       // Clear cart
       await manager.delete(CartItem, { cartId: cart.id });
 
       return order;
     });
+
+    // ذخیره‌ی نام پت در جدول پت‌ها؛ خطای آن نباید ثبت سفارش را شکست دهد
+    const petName = dto.shippingAddress?.petName;
+    if (typeof petName === "string" && petName.trim()) {
+      try {
+        await this.petsService.ensureByName(user.id, petName);
+      } catch {}
+    }
+
+    return createdOrder;
   }
 
   async findUserOrders(userId: string, page = 1, limit = 20) {

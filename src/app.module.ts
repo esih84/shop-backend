@@ -40,6 +40,8 @@ import { Wishlist } from "./modules/wishlist/entities/wishlist.entity";
 import { Referral } from "./modules/referrals/entities/referral.entity";
 import { AbandonedCart } from "./modules/campaigns/entities/abandoned-cart.entity";
 import { ProductView } from "./modules/analytics/entities/product-view.entity";
+import { Address } from "./modules/addresses/entities/address.entity";
+import { Pet } from "./modules/pets/entities/pet.entity";
 
 // Modules
 import { AuthModule } from "./modules/auth/auth.module";
@@ -58,6 +60,8 @@ import { WishlistModule } from "./modules/wishlist/wishlist.module";
 import { ReferralsModule } from "./modules/referrals/referrals.module";
 import { AnalyticsModule } from "./modules/analytics/analytics.module";
 import { UploadModule } from "./modules/upload/upload.module";
+import { AddressesModule } from "./modules/addresses/addresses.module";
+import { PetsModule } from "./modules/pets/pets.module";
 
 @Module({
   imports: [
@@ -104,6 +108,8 @@ import { UploadModule } from "./modules/upload/upload.module";
           Referral,
           AbandonedCart,
           ProductView,
+          Address,
+          Pet,
         ],
         synchronize: config.get("app.nodeEnv") !== "production",
         logging: config.get("app.nodeEnv") === "development",
@@ -187,6 +193,8 @@ import { UploadModule } from "./modules/upload/upload.module";
     ReferralsModule,
     AnalyticsModule,
     UploadModule,
+    AddressesModule,
+    PetsModule,
   ],
 })
 export class AppModule {}

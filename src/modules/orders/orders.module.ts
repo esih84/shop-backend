@@ -11,6 +11,7 @@ import { Coupon } from '../coupons/entities/coupon.entity';
 import { CouponUsage } from '../coupons/entities/coupon-usage.entity';
 import { UserLoyalty } from '../loyalty/entities/user-loyalty.entity';
 import { PointTransaction } from '../loyalty/entities/point-transaction.entity';
+import { PetsModule } from '../pets/pets.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { PointTransaction } from '../loyalty/entities/point-transaction.entity';
       Order, OrderItem, Cart, CartItem, Product,
       Coupon, CouponUsage, UserLoyalty, PointTransaction,
     ]),
+    PetsModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],
