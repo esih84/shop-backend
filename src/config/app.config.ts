@@ -4,6 +4,8 @@ export default registerAs("app", () => ({
   nodeEnv: process.env.NODE_ENV || "development",
   port: parseInt(process.env.PORT || "3000", 10),
   url: process.env.APP_URL || "http://localhost:3000",
+  // آدرس فروشگاه (فرانت) برای بازگشت کاربر پس از پرداخت
+  frontendUrl: process.env.FRONTEND_URL || "http://localhost:3001",
 
   // OTP
   otpExpiryMinutes: parseInt(process.env.OTP_EXPIRY_MINUTES || "5", 10),

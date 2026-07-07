@@ -14,6 +14,7 @@ import databaseConfig from "./config/database.config";
 import redisConfig from "./config/redis.config";
 import jwtConfig from "./config/jwt.config";
 import awsConfig from "./config/aws.config";
+import zarinpalConfig from "./config/zarinpal.config";
 
 // Entities
 import { User } from "./modules/users/entities/user.entity";
@@ -42,6 +43,7 @@ import { AbandonedCart } from "./modules/campaigns/entities/abandoned-cart.entit
 import { ProductView } from "./modules/analytics/entities/product-view.entity";
 import { Address } from "./modules/addresses/entities/address.entity";
 import { Pet } from "./modules/pets/entities/pet.entity";
+import { Payment } from "./modules/payment/entities/payment.entity";
 
 // Modules
 import { AuthModule } from "./modules/auth/auth.module";
@@ -62,13 +64,21 @@ import { AnalyticsModule } from "./modules/analytics/analytics.module";
 import { UploadModule } from "./modules/upload/upload.module";
 import { AddressesModule } from "./modules/addresses/addresses.module";
 import { PetsModule } from "./modules/pets/pets.module";
+import { PaymentModule } from "./modules/payment/payment.module";
 
 @Module({
   imports: [
     // Config
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, databaseConfig, redisConfig, jwtConfig, awsConfig],
+      load: [
+        appConfig,
+        databaseConfig,
+        redisConfig,
+        jwtConfig,
+        awsConfig,
+        zarinpalConfig,
+      ],
       envFilePath: [".env.local", ".env"],
     }),
 
@@ -110,6 +120,7 @@ import { PetsModule } from "./modules/pets/pets.module";
           ProductView,
           Address,
           Pet,
+          Payment,
         ],
         synchronize: config.get("app.nodeEnv") !== "production",
         logging: config.get("app.nodeEnv") === "development",
@@ -195,6 +206,7 @@ import { PetsModule } from "./modules/pets/pets.module";
     UploadModule,
     AddressesModule,
     PetsModule,
+    PaymentModule,
   ],
 })
 export class AppModule {}
