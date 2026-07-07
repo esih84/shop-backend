@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  OnModuleInit,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, DataSource } from "typeorm";
@@ -21,9 +22,10 @@ import { CreateOrderDto } from "./dto/order.dto";
 import { User } from "../users/entities/user.entity";
 import { paginated } from "../../common/dto/paginated-result";
 import { PetsService } from "../pets/pets.service";
+import { toJalaliYmd } from "../../common/utils/jalali";
 
 @Injectable()
-export class OrdersService {
+export class OrdersService implements OnModuleInit {
   constructor(
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
@@ -42,6 +44,13 @@ export class OrdersService {
     private readonly dataSource: DataSource,
     private readonly petsService: PetsService,
   ) {}
+
+  // سکانس شماره‌ی سفارش را (اگر نبود) می‌سازد تا شماره‌ها امن و پیوسته باشند.
+  async onModuleInit(): Promise<void> {
+    await this.dataSource.query(
+      "CREATE SEQUENCE IF NOT EXISTS orders_number_seq START 1001",
+    );
+  }
 
   async createFromCart(user: User, dto: CreateOrderDto): Promise<Order> {
     const cart = await this.cartRepository.findOne({
@@ -142,9 +151,16 @@ export class OrdersService {
 
       const finalAmount = Math.max(0, totalAmount - discountAmount);
 
+      // شماره‌ی سفارش خوانا: PL-<تاریخ شمسی>-<شماره‌ی سکانس> (مثل PL-14050416-1001)
+      const seqRows = (await manager.query(
+        "SELECT nextval('orders_number_seq') AS n",
+      )) as Array<{ n: string }>;
+      const orderNumber = `PL-${toJalaliYmd()}-${seqRows[0].n}`;
+
       const order = await manager.save(
         manager.create(Order, {
           userId: user.id,
+          orderNumber,
           totalAmount,
           discountAmount,
           finalAmount,

@@ -27,6 +27,10 @@ export class Order {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Index({ unique: true })
+  @Column({ name: 'order_number', nullable: true })
+  orderNumber?: string;
+
   @Index()
   @Column({ name: 'user_id' })
   userId: string;
