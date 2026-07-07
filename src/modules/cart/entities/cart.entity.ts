@@ -28,6 +28,14 @@ export class Cart {
   @OneToMany(() => CartItem, (item) => item.cart, { cascade: true })
   items: CartItem[];
 
+  /** کد تخفیف اعمال‌شده روی سبد (مدل دیجی‌کالا) — هنگام ثبت سفارش مستقیم استفاده می‌شود. */
+  @Column({ name: 'coupon_code', type: 'varchar', nullable: true })
+  couponCode?: string | null;
+
+  /** مبلغ تخفیف محاسبه‌شده‌ی همان کوپن؛ هنگام تغییر اقلام سبد صفر می‌شود. */
+  @Column({ name: 'discount_amount', type: 'decimal', precision: 12, scale: 2, default: 0 })
+  discountAmount: number;
+
   @Column({ name: 'expires_at', nullable: true })
   expiresAt?: Date;
 

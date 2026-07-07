@@ -10,7 +10,7 @@ import { OrderItem } from "./entities/order-item.entity";
 import { Cart } from "../cart/entities/cart.entity";
 import { CartItem } from "../cart/entities/cart-item.entity";
 import { Product } from "../products/entities/product.entity";
-import { Coupon, CouponType } from "../coupons/entities/coupon.entity";
+import { Coupon } from "../coupons/entities/coupon.entity";
 import { CouponUsage } from "../coupons/entities/coupon-usage.entity";
 import { UserLoyalty } from "../loyalty/entities/user-loyalty.entity";
 import {
@@ -93,46 +93,24 @@ export class OrdersService {
         });
       }
 
-      // Apply coupon
-      if (dto.couponCode) {
+      // کوپن به‌سبک دیجی‌کالا: تخفیف قبلاً هنگام اعمال روی سبد ذخیره شده؛ اینجا بازمحاسبه نمی‌شود.
+      let appliedCouponCode: string | undefined;
+      if (cart.couponCode && Number(cart.discountAmount) > 0) {
         const coupon = await manager.findOne(Coupon, {
-          where: { code: dto.couponCode, isActive: true },
+          where: { code: cart.couponCode, isActive: true },
         });
         if (coupon) {
-          const usageCount = await manager.count(CouponUsage, {
-            where: { couponId: coupon.id },
-          });
-          const userUsageCount = await manager.count(CouponUsage, {
-            where: { couponId: coupon.id, userId: user.id },
-          });
+          const couponDiscount = Number(cart.discountAmount);
+          appliedCouponCode = coupon.code;
+          discountAmount += couponDiscount;
 
-          if (
-            (!coupon.usageLimit || usageCount < coupon.usageLimit) &&
-            userUsageCount < coupon.perUserLimit &&
-            totalAmount >= Number(coupon.minPurchase) &&
-            (!coupon.startDate || coupon.startDate <= new Date()) &&
-            (!coupon.endDate || coupon.endDate >= new Date())
-          ) {
-            if (coupon.type === CouponType.PERCENTAGE) {
-              discountAmount = (totalAmount * Number(coupon.value)) / 100;
-              if (coupon.maxDiscount) {
-                discountAmount = Math.min(
-                  discountAmount,
-                  Number(coupon.maxDiscount),
-                );
-              }
-            } else if (coupon.type === CouponType.FIXED) {
-              discountAmount = Math.min(Number(coupon.value), totalAmount);
-            }
-
-            await manager.save(
-              manager.create(CouponUsage, {
-                couponId: coupon.id,
-                userId: user.id,
-                discountApplied: discountAmount,
-              }),
-            );
-          }
+          await manager.save(
+            manager.create(CouponUsage, {
+              couponId: coupon.id,
+              userId: user.id,
+              discountApplied: couponDiscount,
+            }),
+          );
         }
       }
 
@@ -170,7 +148,7 @@ export class OrdersService {
           totalAmount,
           discountAmount,
           finalAmount,
-          couponCode: dto.couponCode,
+          couponCode: appliedCouponCode,
           pointsRedeemed: dto.pointsToRedeem ?? 0,
           shippingAddress: dto.shippingAddress,
           items: orderItems as OrderItem[],

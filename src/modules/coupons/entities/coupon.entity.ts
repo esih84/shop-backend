@@ -21,6 +21,13 @@ export enum CouponType {
   FREE_SHIPPING = 'free_shipping',
 }
 
+/** دامنه‌ی اعمال کوپن: کل سبد، محصولات مشخص، یا دسته‌بندی‌های مشخص (مستقل از CouponType). */
+export enum CouponScope {
+  CART = 'cart',
+  PRODUCT = 'product',
+  CATEGORY = 'category',
+}
+
 @Entity('coupons')
 export class Coupon {
   @PrimaryGeneratedColumn('uuid')
@@ -32,6 +39,9 @@ export class Coupon {
 
   @Column({ type: 'enum', enum: CouponType })
   type: CouponType;
+
+  @Column({ type: 'enum', enum: CouponScope, default: CouponScope.CART })
+  scope: CouponScope;
 
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   value: number;

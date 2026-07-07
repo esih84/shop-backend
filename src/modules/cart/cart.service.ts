@@ -22,6 +22,14 @@ export class CartService {
     private readonly productRepository: Repository<Product>,
   ) {}
 
+  /** با تغییر اقلام سبد، کوپن اعمال‌شده باطل می‌شود تا مبلغ ذخیره‌شده کهنه نماند. */
+  private async invalidateCoupon(cartId: string): Promise<void> {
+    await this.cartRepository.update(cartId, {
+      couponCode: null,
+      discountAmount: 0,
+    });
+  }
+
   async getOrCreateCart(userId: string): Promise<Cart> {
     let cart = await this.cartRepository.findOne({
       where: { userId },
@@ -69,6 +77,7 @@ export class CartService {
       );
     }
 
+    await this.invalidateCoupon(cart.id);
     return this.getOrCreateCart(user.id);
   }
 
@@ -89,6 +98,7 @@ export class CartService {
     }
 
     await this.cartItemRepository.update(itemId, { quantity: dto.quantity });
+    await this.invalidateCoupon(cart.id);
     return this.getOrCreateCart(user.id);
   }
 
@@ -97,6 +107,7 @@ export class CartService {
     const item = cart.items?.find((i) => i.id === itemId);
     if (!item) throw new NotFoundException("Cart item not found");
     await this.cartItemRepository.remove(item);
+    await this.invalidateCoupon(cart.id);
     return this.getOrCreateCart(user.id);
   }
 

@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CouponsService } from './coupons.service';
-import { CreateCouponDto, ValidateCouponDto } from './dto/coupon.dto';
+import { CreateCouponDto, ApplyCouponDto } from './dto/coupon.dto';
 import { Roles, Role } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { User } from '../users/entities/user.entity';
@@ -12,15 +12,30 @@ import { User } from '../users/entities/user.entity';
 export class CouponsController {
   constructor(private readonly couponsService: CouponsService) {}
 
-  @Post('validate')
-  validate(@CurrentUser() user: User, @Body() dto: ValidateCouponDto) {
-    return this.couponsService.validate(user.id, dto);
+  @Post('apply')
+  apply(@CurrentUser() user: User, @Body() dto: ApplyCouponDto) {
+    return this.couponsService.applyForUser(user.id, dto.code);
+  }
+
+  @Delete('apply')
+  removeApplied(@CurrentUser() user: User) {
+    return this.couponsService.removeCoupon(user.id);
   }
 
   @Get()
   @Roles(Role.ADMIN)
   findAll(@Query('page') page = 1, @Query('limit') limit = 20) {
     return this.couponsService.findAll(page, limit);
+  }
+
+  @Get('usages')
+  @Roles(Role.ADMIN)
+  findUsages(
+    @Query('page') page = 1,
+    @Query('limit') limit = 20,
+    @Query('couponId') couponId?: string,
+  ) {
+    return this.couponsService.findUsages(page, limit, couponId);
   }
 
   @Post()

@@ -1,8 +1,8 @@
-import { IsOptional, IsString, IsInt, Min, Max, IsObject } from 'class-validator';
+import { IsOptional, IsInt, Min, IsObject } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateOrderDto {
-  @ApiPropertyOptional() @IsOptional() @IsString() couponCode?: string;
+  // کد تخفیف روی خود سبد ذخیره می‌شود (POST /coupons/apply)؛ اینجا لازم نیست.
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) pointsToRedeem?: number;
   @ApiPropertyOptional() @IsOptional() @IsObject() shippingAddress?: Record<string, unknown>;
 }
