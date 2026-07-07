@@ -6,7 +6,12 @@ import { Inject } from "@nestjs/common";
 import { Product } from "./entities/product.entity";
 import { ProductImage } from "./entities/product-image.entity";
 import { ProductAttribute } from "./entities/product-attribute.entity";
-import { CreateProductDto, FilterProductsDto } from "./dto/product.dto";
+import { Discount, DiscountType } from "./entities/discount.entity";
+import {
+  CreateProductDto,
+  CreateDiscountDto,
+  FilterProductsDto,
+} from "./dto/product.dto";
 import { UploadService } from "../upload/upload.service";
 import { paginated } from "../../common/dto/paginated-result";
 import slugify from "slugify";
@@ -20,10 +25,45 @@ export class ProductsService {
     private readonly imageRepository: Repository<ProductImage>,
     @InjectRepository(ProductAttribute)
     private readonly attributeRepository: Repository<ProductAttribute>,
+    @InjectRepository(Discount)
+    private readonly discountRepository: Repository<Discount>,
     @Inject(CACHE_MANAGER)
     private readonly cacheManager: Cache,
     private readonly uploadService: UploadService,
   ) {}
+
+  /**
+   * تخفیف فعال محصول را در تاریخ جاری پیدا می‌کند (isActive و در بازه‌ی تاریخ).
+   * اگر چند تخفیف فعال باشد، تخفیفی که بیشترین کاهش قیمت را می‌دهد انتخاب می‌شود.
+   * سپس `discountedPrice` و `activeDiscount` را روی محصول ست می‌کند تا در پاسخ بیاید.
+   */
+  private applyDiscount(product: Product): Product {
+    const now = Date.now();
+    const base = Number(product.basePrice);
+    let bestPrice = base;
+    let best: Discount | null = null;
+
+    for (const d of product.discounts ?? []) {
+      if (!d.isActive) continue;
+      if (d.startDate && new Date(d.startDate).getTime() > now) continue;
+      if (d.endDate && new Date(d.endDate).getTime() < now) continue;
+      const price =
+        d.type === DiscountType.PERCENTAGE
+          ? base - (base * Number(d.value)) / 100
+          : base - Number(d.value);
+      const clamped = Math.max(0, Math.round(price));
+      if (clamped < bestPrice) {
+        bestPrice = clamped;
+        best = d;
+      }
+    }
+
+    (product as Product & { discountedPrice: number }).discountedPrice =
+      bestPrice;
+    (product as Product & { activeDiscount: Discount | null }).activeDiscount =
+      best;
+    return product;
+  }
 
   /**
    * آپلود فایل‌های تصویر داخل ماژول product و ساخت رکوردهای ProductImage.
@@ -98,7 +138,8 @@ export class ProductsService {
     const qb = this.productRepository
       .createQueryBuilder("p")
       .leftJoinAndSelect("p.category", "cat")
-      .leftJoinAndSelect("p.images", "img", "img.isPrimary = true");
+      .leftJoinAndSelect("p.images", "img", "img.isPrimary = true")
+      .leftJoinAndSelect("p.discounts", "disc");
 
     // مسیر عمومی فقط محصولات فعال؛ مسیر ادمین همه را برمی‌گرداند
     if (!includeInactive) qb.andWhere("p.isActive = true");
@@ -132,6 +173,7 @@ export class ProductsService {
     qb.skip((page - 1) * limit).take(limit);
 
     const [items, total] = await qb.getManyAndCount();
+    items.forEach((p) => this.applyDiscount(p));
     return paginated(items, total, page, limit);
   }
 
@@ -164,6 +206,7 @@ export class ProductsService {
     if (!product) throw new NotFoundException("Product not found");
 
     this.sortImages(product);
+    this.applyDiscount(product);
     await this.cacheManager.set(cacheKey, product, 3600000);
     return product;
   }
@@ -193,7 +236,8 @@ export class ProductsService {
       },
     });
     if (!product) throw new NotFoundException("Product not found");
-    return this.sortImages(product);
+    this.sortImages(product);
+    return this.applyDiscount(product);
   }
 
   /**
@@ -248,6 +292,43 @@ export class ProductsService {
     const product = await this.findById(id);
     await this.productRepository.remove(product);
     await this.invalidateCache(product);
+  }
+
+  /** افزودن تخفیف به محصول. محصول به‌روزشده (با قیمت مؤثر) برگردانده می‌شود. */
+  async addDiscount(
+    productId: string,
+    dto: CreateDiscountDto,
+  ): Promise<Product> {
+    productId = productId.trim();
+    const product = await this.findById(productId);
+    const discount = this.discountRepository.create({
+      productId: product.id,
+      type: dto.type,
+      value: dto.value,
+      startDate: new Date(dto.startDate),
+      endDate: new Date(dto.endDate),
+      isActive: dto.isActive ?? true,
+    });
+    await this.discountRepository.save(discount);
+    const updated = await this.findById(productId);
+    await this.invalidateCache(updated);
+    return updated;
+  }
+
+  /** حذف یک تخفیف از محصول. */
+  async removeDiscount(
+    productId: string,
+    discountId: string,
+  ): Promise<Product> {
+    productId = productId.trim();
+    const discount = await this.discountRepository.findOne({
+      where: { id: discountId, productId },
+    });
+    if (!discount) throw new NotFoundException("Discount not found");
+    await this.discountRepository.remove(discount);
+    const updated = await this.findById(productId);
+    await this.invalidateCache(updated);
+    return updated;
   }
 
   /** حذف یک تصویر محصول. اگر تصویر اصلی حذف شود، اولین تصویر باقی‌مانده اصلی می‌شود. */

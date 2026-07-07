@@ -25,6 +25,7 @@ import {
   UpdateProductDto,
   FilterProductsDto,
   ReorderImagesDto,
+  CreateDiscountDto,
 } from "./dto/product.dto";
 import { Roles, Role } from "../../common/decorators/roles.decorator";
 import { Public } from "../../common/decorators/public.decorator";
@@ -116,6 +117,25 @@ export class ProductsController {
   @ApiOperation({ summary: "Delete a single product image (admin)" })
   deleteImage(@Param("id") id: string, @Param("imageId") imageId: string) {
     return this.productsService.deleteImage(id, imageId);
+  }
+
+  @Post(":id/discounts")
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth("access-token")
+  @ApiOperation({ summary: "Add a discount to a product (admin)" })
+  addDiscount(@Param("id") id: string, @Body() dto: CreateDiscountDto) {
+    return this.productsService.addDiscount(id, dto);
+  }
+
+  @Delete(":id/discounts/:discountId")
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth("access-token")
+  @ApiOperation({ summary: "Remove a discount from a product (admin)" })
+  removeDiscount(
+    @Param("id") id: string,
+    @Param("discountId") discountId: string,
+  ) {
+    return this.productsService.removeDiscount(id, discountId);
   }
 
   @Delete(":id")

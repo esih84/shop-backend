@@ -1,6 +1,6 @@
 import {
   IsString, IsOptional, IsBoolean, IsNumber, IsUUID, IsArray,
-  ValidateNested, Min, IsNotEmpty,
+  ValidateNested, Min, IsNotEmpty, IsEnum, IsDateString,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
@@ -9,6 +9,7 @@ import {
   toBoolean,
   toNumber,
 } from '../../../common/transforms';
+import { DiscountType } from '../entities/discount.entity';
 
 export class CreateAttributeDto {
   @ApiProperty() @IsString() key: string;
@@ -101,6 +102,32 @@ export class ReorderImagesDto {
   @IsArray()
   @IsUUID('all', { each: true })
   imageIds: string[];
+}
+
+export class CreateDiscountDto {
+  @ApiProperty({ enum: DiscountType, description: 'درصدی یا مبلغ ثابت' })
+  @IsEnum(DiscountType)
+  type: DiscountType;
+
+  @ApiProperty({ description: 'مقدار تخفیف (درصد یا تومان)' })
+  @Transform(toNumber)
+  @IsNumber()
+  @Min(0)
+  value: number;
+
+  @ApiProperty({ description: 'تاریخ شروع (ISO)' })
+  @IsDateString()
+  startDate: string;
+
+  @ApiProperty({ description: 'تاریخ پایان (ISO)' })
+  @IsDateString()
+  endDate: string;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @Transform(toBoolean)
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class FilterProductsDto {
