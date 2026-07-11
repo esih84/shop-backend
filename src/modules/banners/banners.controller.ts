@@ -18,6 +18,7 @@ import type { BannerImageFiles } from "./banners.service";
 import { CreateBannerDto } from "./dto/banner.dto";
 import { Roles, Role } from "../../common/decorators/roles.decorator";
 import { Public } from "../../common/decorators/public.decorator";
+import { PaginationDto } from "../../common/dto/pagination.dto";
 
 const bannerImageFields = FileFieldsInterceptor(
   [
@@ -39,6 +40,16 @@ export class BannersController {
       ? positions.split(",").map((p) => p.trim())
       : undefined;
     return this.bannersService.findActive(positionsArray);
+  }
+
+  @Get("admin/all")
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth("access-token")
+  findAllAdmin(@Query() pagination: PaginationDto) {
+    return this.bannersService.findAllAdmin(
+      pagination.page ?? 1,
+      pagination.limit ?? 20,
+    );
   }
 
   @Post()

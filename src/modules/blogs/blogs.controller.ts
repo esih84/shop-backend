@@ -6,6 +6,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles, Role } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { User } from '../users/entities/user.entity';
+import { PaginationDto } from '../../common/dto/pagination.dto';
 
 @ApiTags('blogs')
 @Controller('blogs')
@@ -16,6 +17,18 @@ export class BlogsController {
   @Public()
   findAll(@Query('page') page = 1, @Query('limit') limit = 20) {
     return this.blogsService.findAll(page, limit);
+  }
+
+  // باید پیش از مسیر ':slug' باشد تا 'admin' به‌عنوان slug تفسیر نشود.
+  @Get('admin/all')
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'List all blogs incl. drafts (admin)' })
+  findAllAdmin(@Query() pagination: PaginationDto) {
+    return this.blogsService.findAllAdmin(
+      pagination.page ?? 1,
+      pagination.limit ?? 20,
+    );
   }
 
   @Get(':slug')

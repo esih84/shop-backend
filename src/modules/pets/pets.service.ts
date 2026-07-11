@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Pet } from './entities/pet.entity';
 import { CreatePetDto, UpdatePetDto } from './dto/pet.dto';
+import { paginated } from '../../common/dto/paginated-result';
 
 @Injectable()
 export class PetsService {
@@ -16,6 +17,17 @@ export class PetsService {
       where: { userId },
       order: { createdAt: 'DESC' },
     });
+  }
+
+  /** لیست همه‌ی حیوانات خانگی همراه با صاحبشان (ادمین). */
+  async findAllAdmin(page = 1, limit = 20) {
+    const [pets, total] = await this.petRepository.findAndCount({
+      relations: { user: true },
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    return paginated(pets, total, page, limit);
   }
 
   async findOne(userId: string, id: string): Promise<Pet> {

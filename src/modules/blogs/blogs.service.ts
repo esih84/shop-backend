@@ -32,6 +32,16 @@ export class BlogsService {
     return paginated(blogs, total, page, limit);
   }
 
+  /** لیست همه‌ی مطالب (شامل پیش‌نویس‌ها) با صفحه‌بندی — پنل ادمین */
+  async findAllAdmin(page = 1, limit = 20) {
+    const [blogs, total] = await this.blogRepository.findAndCount({
+      order: { createdAt: "DESC" },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    return paginated(blogs, total, page, limit);
+  }
+
   async findBySlug(slug: string): Promise<Blog> {
     const blog = await this.blogRepository.findOne({ where: { slug } });
     if (!blog) throw new NotFoundException("Blog not found");

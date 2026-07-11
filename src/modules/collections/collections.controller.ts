@@ -1,9 +1,19 @@
-import { Controller, Get, Post, Put, Delete, Body, Param } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CollectionsService } from './collections.service';
 import { CreateCollectionDto } from './dto/collection.dto';
 import { Roles, Role } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { PaginationDto } from '../../common/dto/pagination.dto';
 
 @ApiTags('collections')
 @Controller('collections')
@@ -14,6 +24,17 @@ export class CollectionsController {
   @Public()
   findAll() {
     return this.collectionsService.findAll();
+  }
+
+  // باید پیش از مسیر ':slug' باشد تا 'admin' به‌عنوان slug تفسیر نشود.
+  @Get('admin/all')
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth('access-token')
+  findAllAdmin(@Query() pagination: PaginationDto) {
+    return this.collectionsService.findAllAdmin(
+      pagination.page ?? 1,
+      pagination.limit ?? 20,
+    );
   }
 
   @Get(':slug')

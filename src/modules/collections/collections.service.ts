@@ -4,6 +4,7 @@ import { In, Repository } from "typeorm";
 import { Collection } from "./entities/collection.entity";
 import { Product } from "../products/entities/product.entity";
 import { CreateCollectionDto } from "./dto/collection.dto";
+import { paginated } from "../../common/dto/paginated-result";
 
 @Injectable()
 export class CollectionsService {
@@ -27,6 +28,16 @@ export class CollectionsService {
 
   async findAll() {
     return this.collectionRepository.find({ where: { isActive: true } });
+  }
+
+  /** لیست همه‌ی کالکشن‌ها (شامل غیرفعال) با صفحه‌بندی — پنل ادمین */
+  async findAllAdmin(page = 1, limit = 20) {
+    const [data, total] = await this.collectionRepository.findAndCount({
+      order: { createdAt: "DESC" },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    return paginated(data, total, page, limit);
   }
 
   async findBySlug(slug: string): Promise<Collection> {

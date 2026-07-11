@@ -8,6 +8,7 @@ import { Repository, LessThanOrEqual, MoreThanOrEqual, IsNull, In } from "typeor
 import { Banner } from "./entities/banner.entity";
 import { CreateBannerDto } from "./dto/banner.dto";
 import { UploadService } from "../upload/upload.service";
+import { paginated } from "../../common/dto/paginated-result";
 
 export interface BannerImageFiles {
   image?: Express.Multer.File[];
@@ -36,6 +37,16 @@ export class BannersService {
         createdAt: 'DESC',
       },
     });
+  }
+
+  /** لیست همه‌ی بنرها (شامل غیرفعال) با صفحه‌بندی — پنل ادمین */
+  async findAllAdmin(page = 1, limit = 20) {
+    const [data, total] = await this.bannerRepository.findAndCount({
+      order: { order: 'ASC', createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    return paginated(data, total, page, limit);
   }
 
   async create(
