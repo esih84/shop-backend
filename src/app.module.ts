@@ -20,6 +20,7 @@ import zarinpalConfig from "./config/zarinpal.config";
 import { User } from "./modules/users/entities/user.entity";
 import { Otp } from "./modules/auth/entities/otp.entity";
 import { Category } from "./modules/categories/entities/category.entity";
+import { Brand } from "./modules/brands/entities/brand.entity";
 import { Product } from "./modules/products/entities/product.entity";
 import { ProductImage } from "./modules/products/entities/product-image.entity";
 import { ProductAttribute } from "./modules/products/entities/product-attribute.entity";
@@ -49,6 +50,7 @@ import { Payment } from "./modules/payment/entities/payment.entity";
 import { AuthModule } from "./modules/auth/auth.module";
 import { UsersModule } from "./modules/users/users.module";
 import { CategoriesModule } from "./modules/categories/categories.module";
+import { BrandsModule } from "./modules/brands/brands.module";
 import { ProductsModule } from "./modules/products/products.module";
 import { ReviewsModule } from "./modules/reviews/reviews.module";
 import { CartModule } from "./modules/cart/cart.module";
@@ -97,6 +99,7 @@ import { PaymentModule } from "./modules/payment/payment.module";
           User,
           Otp,
           Category,
+          Brand,
           Product,
           ProductImage,
           ProductAttribute,
@@ -191,6 +194,7 @@ import { PaymentModule } from "./modules/payment/payment.module";
     AuthModule,
     UsersModule,
     CategoriesModule,
+    BrandsModule,
     ProductsModule,
     ReviewsModule,
     CartModule,

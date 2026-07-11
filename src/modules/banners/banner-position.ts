@@ -7,6 +7,7 @@ export const BANNER_POSITIONS = [
   "home_main",
   "home_side_top",
   "home_side_bottom",
+  "brands",
 ] as const;
 
 export type BannerPosition = (typeof BANNER_POSITIONS)[number];
