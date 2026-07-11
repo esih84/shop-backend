@@ -83,6 +83,10 @@ export class Order {
   @Column({ type: 'jsonb', name: 'shipping_address', nullable: true })
   shippingAddress?: Record<string, unknown>;
 
+  /** زمان پرداخت موفق (برای گزارش recency/monetary و دوره‌ی بازگشت خرید). */
+  @Column({ name: 'paid_at', type: 'timestamptz', nullable: true })
+  paidAt?: Date;
+
   @Index()
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

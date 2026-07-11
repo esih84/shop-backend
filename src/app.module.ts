@@ -45,6 +45,9 @@ import { ProductView } from "./modules/analytics/entities/product-view.entity";
 import { Address } from "./modules/addresses/entities/address.entity";
 import { Pet } from "./modules/pets/entities/pet.entity";
 import { Payment } from "./modules/payment/entities/payment.entity";
+import { SmsTemplate } from "./modules/sms/entities/sms-template.entity";
+import { SmsMessage } from "./modules/sms/entities/sms-message.entity";
+import { SmsCampaign } from "./modules/sms/entities/sms-campaign.entity";
 
 // Modules
 import { AuthModule } from "./modules/auth/auth.module";
@@ -67,6 +70,8 @@ import { UploadModule } from "./modules/upload/upload.module";
 import { AddressesModule } from "./modules/addresses/addresses.module";
 import { PetsModule } from "./modules/pets/pets.module";
 import { PaymentModule } from "./modules/payment/payment.module";
+import { SmsModule } from "./modules/sms/sms.module";
+import { CrmModule } from "./modules/crm/crm.module";
 
 @Module({
   imports: [
@@ -124,6 +129,9 @@ import { PaymentModule } from "./modules/payment/payment.module";
           Address,
           Pet,
           Payment,
+          SmsTemplate,
+          SmsMessage,
+          SmsCampaign,
         ],
         synchronize: config.get("app.nodeEnv") !== "production",
         logging: config.get("app.nodeEnv") === "development",
@@ -211,6 +219,8 @@ import { PaymentModule } from "./modules/payment/payment.module";
     AddressesModule,
     PetsModule,
     PaymentModule,
+    CrmModule,
+    SmsModule,
   ],
 })
 export class AppModule {}

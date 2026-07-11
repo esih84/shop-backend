@@ -22,6 +22,7 @@ import { CreateOrderDto } from "./dto/order.dto";
 import { User } from "../users/entities/user.entity";
 import { paginated } from "../../common/dto/paginated-result";
 import { PetsService } from "../pets/pets.service";
+import { SmsNotificationsService } from "../sms/sms-notifications.service";
 import { toJalaliYmd } from "../../common/utils/jalali";
 
 @Injectable()
@@ -43,6 +44,7 @@ export class OrdersService implements OnModuleInit {
     private readonly pointTransactionRepository: Repository<PointTransaction>,
     private readonly dataSource: DataSource,
     private readonly petsService: PetsService,
+    private readonly smsNotifications: SmsNotificationsService,
   ) {}
 
   // سکانس شماره‌ی سفارش را (اگر نبود) می‌سازد تا شماره‌ها امن و پیوسته باشند.
@@ -238,6 +240,13 @@ export class OrdersService implements OnModuleInit {
   async updateStatus(id: string, status: OrderStatus): Promise<Order> {
     await this.findById(id);
     await this.orderRepository.update(id, { status });
-    return this.findById(id);
+    const updated = await this.findById(id);
+    // پیامک تغییر وضعیت — خطای آن نباید به‌روزرسانی وضعیت را بشکند
+    try {
+      await this.smsNotifications.sendOrderStatus(updated);
+    } catch {
+      /* noop */
+    }
+    return updated;
   }
 }

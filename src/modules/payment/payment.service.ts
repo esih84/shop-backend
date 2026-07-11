@@ -10,6 +10,8 @@ import { Order, OrderStatus } from "../orders/entities/order.entity";
 import { User } from "../users/entities/user.entity";
 import { Payment, PaymentStatus } from "./entities/payment.entity";
 import { ZarinpalService } from "./zarinpal.service";
+import { CrmService } from "../crm/crm.service";
+import { SmsNotificationsService } from "../sms/sms-notifications.service";
 
 @Injectable()
 export class PaymentService {
@@ -20,6 +22,8 @@ export class PaymentService {
     private readonly orderRepo: Repository<Order>,
     private readonly zarinpal: ZarinpalService,
     private readonly config: ConfigService,
+    private readonly crmService: CrmService,
+    private readonly smsNotifications: SmsNotificationsService,
   ) {}
 
   /** ساخت تراکنش برای یک سفارش و گرفتن آدرس درگاه. */
@@ -108,10 +112,30 @@ export class PaymentService {
       return failUrl;
     }
 
+    const paidAt = new Date();
     payment.status = PaymentStatus.PAID;
     payment.refId = result.refId;
     await this.paymentRepo.save(payment);
-    await this.orderRepo.update(orderId, { status: OrderStatus.CONFIRMED });
+    await this.orderRepo.update(orderId, {
+      status: OrderStatus.CONFIRMED,
+      paidAt,
+    });
+
+    // به‌روزرسانی RFM و ارسال پیامک تأیید خرید — هیچ‌کدام نباید جریان پرداخت را بشکند
+    try {
+      await this.crmService.recordPurchase(
+        payment.userId,
+        Number(payment.amount),
+        paidAt,
+      );
+    } catch {
+      /* noop */
+    }
+    try {
+      await this.smsNotifications.sendPurchaseConfirmation(orderId);
+    } catch {
+      /* noop */
+    }
 
     return successUrl(result.refId);
   }
