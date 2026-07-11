@@ -1,12 +1,20 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  OnModuleInit,
+  Logger,
+} from "@nestjs/common";
+import { Workbook } from "exceljs";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import { Cache, CACHE_MANAGER } from "@nestjs/cache-manager";
 import { Inject } from "@nestjs/common";
 import { Product } from "./entities/product.entity";
 import { ProductImage } from "./entities/product-image.entity";
 import { ProductAttribute } from "./entities/product-attribute.entity";
 import { Discount, DiscountType } from "./entities/discount.entity";
+import { Category } from "../categories/entities/category.entity";
 import {
   CreateProductDto,
   CreateDiscountDto,
@@ -16,8 +24,25 @@ import { UploadService } from "../upload/upload.service";
 import { paginated } from "../../common/dto/paginated-result";
 import slugify from "slugify";
 
+export interface ImportProductsResult {
+  total: number;
+  created: number;
+  skipped: number;
+  errors: { row: number; reason: string }[];
+}
+
+interface ExcelColumnMap {
+  name?: number;
+  price?: number;
+  sku?: number;
+  stock?: number;
+  category?: number;
+}
+
 @Injectable()
-export class ProductsService {
+export class ProductsService implements OnModuleInit {
+  private readonly logger = new Logger(ProductsService.name);
+
   constructor(
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
@@ -27,10 +52,32 @@ export class ProductsService {
     private readonly attributeRepository: Repository<ProductAttribute>,
     @InjectRepository(Discount)
     private readonly discountRepository: Repository<Discount>,
+    @InjectRepository(Category)
+    private readonly categoryRepository: Repository<Category>,
     @Inject(CACHE_MANAGER)
     private readonly cacheManager: Cache,
     private readonly uploadService: UploadService,
   ) {}
+
+  /**
+   * Backfill یک‌باره: محصولاتی که فقط دسته‌ی اصلی (categoryId) دارند را به جدول
+   * رابطه‌ی چند‌مقداری product_categories منتقل می‌کند تا فیلترهای مبتنی بر M2M
+   * برای داده‌های قدیمی هم کار کند. تکراری‌ها نادیده گرفته می‌شوند.
+   */
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.productRepository.query(
+        `INSERT INTO product_categories (product_id, category_id)
+         SELECT id, category_id FROM products WHERE category_id IS NOT NULL
+         ON CONFLICT DO NOTHING`,
+      );
+    } catch (err) {
+      // جدول ممکن است هنوز ساخته نشده باشد (اولین اجرا با synchronize) — بی‌خطر
+      this.logger.warn(
+        `product_categories backfill skipped: ${(err as Error).message}`,
+      );
+    }
+  }
 
   /**
    * تخفیف فعال محصول را در تاریخ جاری پیدا می‌کند (isActive و در بازه‌ی تاریخ).
@@ -111,13 +158,41 @@ export class ProductsService {
     if (rows.length) await this.attributeRepository.save(rows);
   }
 
+  /**
+   * جایگزینی کامل دسته‌های محصول (رابطه‌ی چند‌مقداری) با مجموعه‌ی ارسالی.
+   * اگر categoryIds ارسال نشده باشد (undefined) دست نمی‌خورد؛ آرایه‌ی خالی همه را
+   * پاک می‌کند. مقدار برگشتی، دسته‌ی اصلی پیشنهادی (اولین دسته) است تا در صورت
+   * خالی‌بودن categoryId روی محصول ست شود.
+   */
+  private async syncCategories(
+    productId: string,
+    categoryIds?: string[],
+  ): Promise<string | undefined> {
+    if (categoryIds === undefined) return undefined;
+    const unique = [...new Set(categoryIds.filter(Boolean))];
+    const categories = unique.length
+      ? await this.categoryRepository.findBy({ id: In(unique) })
+      : [];
+    const product = await this.productRepository.findOne({
+      where: { id: productId },
+      relations: { categories: true },
+    });
+    if (product) {
+      product.categories = categories;
+      await this.productRepository.save(product);
+    }
+    return categories[0]?.id;
+  }
+
   async create(
     dto: CreateProductDto,
     files?: Express.Multer.File[],
   ): Promise<Product> {
-    const { images: _ignored, attributes, ...rest } = dto;
+    const { images: _ignored, attributes, categoryIds, ...rest } = dto;
     const product = this.productRepository.create({
       ...rest,
+      // دسته‌ی اصلی: اگر داده نشده اولین عضو categoryIds
+      categoryId: rest.categoryId ?? categoryIds?.[0],
       slug: dto.slug || slugify(dto.name, { lower: true }),
     });
 
@@ -127,8 +202,171 @@ export class ProductsService {
 
     const saved = await this.productRepository.save(product);
     await this.syncAttributes(saved.id, attributes);
+    const primary = await this.syncCategories(saved.id, categoryIds);
+    if (primary && !saved.categoryId) {
+      await this.productRepository.update(saved.id, { categoryId: primary });
+    }
     await this.invalidateCache();
     return this.findById(saved.id);
+  }
+
+  /**
+   * ورود گروهی محصولات از فایل اکسل. ستون‌ها منعطف تشخیص داده می‌شوند (نام الزامی،
+   * قیمت/کد/موجودی/دسته اختیاری). محصولات ساخته‌شده فعال‌اند و اگر محصولی با همان
+   * نام از قبل موجود باشد، ساخته نمی‌شود (بدون تکرار). خروجی خلاصه‌ی نتیجه است.
+   */
+  async importFromExcel(buffer: Buffer): Promise<ImportProductsResult> {
+    const workbook = new Workbook();
+    await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
+    const ws = workbook.worksheets[0];
+    if (!ws) throw new BadRequestException("فایل اکسل هیچ شیتی ندارد");
+
+    const colMap = this.mapExcelColumns(ws.getRow(1));
+    if (colMap.name === undefined)
+      throw new BadRequestException(
+        "ستون نام کالا در اکسل پیدا نشد (مثلاً «اسم کالا» یا «نام»)",
+      );
+
+    // بارگذاری نام/اسلاگ‌های موجود برای جلوگیری از تکرار
+    const existing = await this.productRepository.find({
+      select: { slug: true, name: true },
+    });
+    const existingSlugs = new Set(existing.map((p) => p.slug));
+    const existingNames = new Set(
+      existing.map((p) => p.name.trim().toLowerCase()),
+    );
+
+    // بارگذاری دسته‌ها بر اساس نام (فقط اگر ستون دسته وجود داشته باشد)
+    const categoriesByName = new Map<string, Category>();
+    if (colMap.category !== undefined) {
+      const cats = await this.categoryRepository.find();
+      cats.forEach((c) => categoriesByName.set(c.name.trim().toLowerCase(), c));
+    }
+
+    const result: ImportProductsResult = {
+      total: 0,
+      created: 0,
+      skipped: 0,
+      errors: [],
+    };
+    const toCreate: Product[] = [];
+    const seenSlugs = new Set<string>();
+
+    const lastRow = ws.actualRowCount || ws.rowCount;
+    for (let r = 2; r <= lastRow; r++) {
+      const row = ws.getRow(r);
+      const name = this.cellString(row.getCell(colMap.name));
+      if (!name) continue; // ردیف خالی نادیده گرفته می‌شود
+      result.total++;
+      const trimmed = name.trim();
+
+      if (existingNames.has(trimmed.toLowerCase())) {
+        result.skipped++;
+        continue;
+      }
+
+      try {
+        // اسلاگ یکتا: slugify؛ اگر خالی (نام غیرلاتین) یا تکراری بود، پسوند بگیر
+        let base = slugify(trimmed, { lower: true }) || `product-${r}`;
+        let slug = base;
+        let i = 1;
+        while (
+          existingSlugs.has(slug) ||
+          seenSlugs.has(slug)
+        ) {
+          slug = `${base}-${i++}`;
+        }
+        seenSlugs.add(slug);
+        existingNames.add(trimmed.toLowerCase());
+
+        const product = this.productRepository.create({
+          name: trimmed,
+          slug,
+          isActive: true,
+          basePrice:
+            colMap.price !== undefined
+              ? this.cellNumber(row.getCell(colMap.price)) ?? 0
+              : 0,
+          stock:
+            colMap.stock !== undefined
+              ? this.cellNumber(row.getCell(colMap.stock)) ?? 0
+              : 0,
+        });
+
+        if (colMap.sku !== undefined) {
+          const sku = this.cellString(row.getCell(colMap.sku));
+          if (sku) product.sku = sku.trim();
+        }
+        if (colMap.category !== undefined) {
+          const catName = this.cellString(row.getCell(colMap.category));
+          const cat = catName
+            ? categoriesByName.get(catName.trim().toLowerCase())
+            : undefined;
+          if (cat) {
+            product.categoryId = cat.id;
+            product.categories = [cat];
+          }
+        }
+        toCreate.push(product);
+        result.created++;
+      } catch (err) {
+        result.errors.push({ row: r, reason: (err as Error).message });
+      }
+    }
+
+    if (toCreate.length) await this.productRepository.save(toCreate);
+    await this.invalidateCache();
+    return result;
+  }
+
+  /** تشخیص شماره‌ی ستون‌ها از ردیف هدر اکسل (۱-based؛ منعطف نسبت به نام‌ها). */
+  private mapExcelColumns(headerRow: {
+    eachCell: (cb: (cell: { value: unknown }, col: number) => void) => void;
+  }): ExcelColumnMap {
+    const map: ExcelColumnMap = {};
+    const has = (v: string, keys: string[]) =>
+      keys.some((k) => v.includes(k));
+    headerRow.eachCell((cell, col) => {
+      const raw = this.cellString(cell as { value: unknown });
+      if (!raw) return;
+      const v = raw.trim().toLowerCase();
+      if (map.name === undefined && has(v, ["اسم کالا", "نام", "name", "title", "کالا", "محصول"]))
+        map.name = col;
+      else if (map.price === undefined && has(v, ["قیمت", "نرخ", "price", "مبلغ"]))
+        map.price = col;
+      else if (map.sku === undefined && has(v, ["sku", "کد"]))
+        map.sku = col;
+      else if (map.stock === undefined && has(v, ["موجودی", "stock", "انبار", "تعداد"]))
+        map.stock = col;
+      else if (map.category === undefined && has(v, ["دسته", "category", "گروه"]))
+        map.category = col;
+    });
+    return map;
+  }
+
+  private cellString(cell: { value: unknown } | undefined): string {
+    const v = cell?.value;
+    if (v === null || v === undefined) return "";
+    if (typeof v === "object" && v !== null) {
+      // رشته‌ی غنی/فرمول اکسل
+      const rich = v as { text?: string; result?: unknown };
+      if (typeof rich.text === "string") return rich.text;
+      if (rich.result !== undefined) return String(rich.result);
+      return "";
+    }
+    return String(v);
+  }
+
+  private cellNumber(cell: { value: unknown } | undefined): number | undefined {
+    const raw = this.cellString(cell);
+    if (!raw) return undefined;
+    // ارقام فارسی/عربی → انگلیسی و حذف جداکننده‌ها
+    const en = raw
+      .replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+      .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+      .replace(/[,\s،]/g, "");
+    const n = Number(en);
+    return Number.isFinite(n) ? n : undefined;
   }
 
   async findAll(filter: FilterProductsDto, includeInactive = false) {
@@ -138,20 +376,29 @@ export class ProductsService {
     const qb = this.productRepository
       .createQueryBuilder("p")
       .leftJoinAndSelect("p.category", "cat")
+      .leftJoinAndSelect("p.brand", "brand")
       .leftJoinAndSelect("p.images", "img", "img.isPrimary = true")
       .leftJoinAndSelect("p.discounts", "disc");
 
     // مسیر عمومی فقط محصولات فعال؛ مسیر ادمین همه را برمی‌گرداند
     if (!includeInactive) qb.andWhere("p.isActive = true");
 
+    // فیلتر دسته بر اساس رابطه‌ی چند‌مقداری product_categories (نه فقط دسته‌ی اصلی)
+    // با EXISTS تا getManyAndCount ردیف تکراری نسازد.
     if (filter.categoryId)
-      qb.andWhere("p.categoryId = :categoryId", {
-        categoryId: filter.categoryId,
-      });
+      qb.andWhere(
+        "EXISTS (SELECT 1 FROM product_categories pc WHERE pc.product_id = p.id AND pc.category_id = :categoryId)",
+        { categoryId: filter.categoryId },
+      );
     if (filter.categorySlug)
-      qb.andWhere("cat.slug = :categorySlug", {
-        categorySlug: filter.categorySlug,
-      });
+      qb.andWhere(
+        "EXISTS (SELECT 1 FROM product_categories pc JOIN categories c ON c.id = pc.category_id WHERE pc.product_id = p.id AND c.slug = :categorySlug)",
+        { categorySlug: filter.categorySlug },
+      );
+    if (filter.brandId)
+      qb.andWhere("p.brandId = :brandId", { brandId: filter.brandId });
+    if (filter.brandSlug)
+      qb.andWhere("brand.slug = :brandSlug", { brandSlug: filter.brandSlug });
     if (filter.minPrice !== undefined)
       qb.andWhere("p.basePrice >= :minPrice", { minPrice: filter.minPrice });
     if (filter.maxPrice !== undefined)
@@ -177,6 +424,41 @@ export class ProductsService {
     return paginated(items, total, page, limit);
   }
 
+  /**
+   * فقط محصولاتی که همین‌الان تخفیف فعال دارند (بخش «پیشنهادهای ویژه»).
+   * منطق فعال‌بودن تخفیف (isActive و بازه‌ی تاریخ) کاملاً سمت بک‌اند است؛
+   * فرانت فقط `discountedPrice`/`activeDiscount` را می‌خواند.
+   */
+  async findDiscounted(filter: FilterProductsDto) {
+    const page = filter.page ?? 1;
+    const limit = Math.min(filter.limit ?? 20, 100);
+
+    const qb = this.productRepository
+      .createQueryBuilder("p")
+      .leftJoinAndSelect("p.category", "cat")
+      .leftJoinAndSelect("p.brand", "brand")
+      .leftJoinAndSelect("p.images", "img", "img.isPrimary = true")
+      .leftJoinAndSelect("p.discounts", "disc")
+      .where("p.isActive = true")
+      // فقط محصولاتی که حداقل یک تخفیف فعالِ در بازه‌ی تاریخ دارند
+      .andWhere(
+        `EXISTS (
+           SELECT 1 FROM discounts d
+           WHERE d.product_id = p.id
+             AND d.is_active = true
+             AND d.start_date <= NOW()
+             AND d.end_date >= NOW()
+         )`,
+      )
+      .orderBy("p.createdAt", "DESC")
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [items, total] = await qb.getManyAndCount();
+    items.forEach((p) => this.applyDiscount(p));
+    return paginated(items, total, page, limit);
+  }
+
   async findBySlug(identifier: string): Promise<Product> {
     const cacheKey = `product:slug:${identifier}`;
     const cached = await this.cacheManager.get<Product>(cacheKey);
@@ -184,6 +466,8 @@ export class ProductsService {
 
     const relations = {
       category: true,
+      brand: true,
+      categories: true,
       images: true,
       attributes: true,
       discounts: true,
@@ -230,6 +514,8 @@ export class ProductsService {
       where: { id },
       relations: {
         category: true,
+        brand: true,
+        categories: true,
         images: true,
         attributes: true,
         discounts: true,
@@ -259,7 +545,7 @@ export class ProductsService {
     // فقط ستون‌های اسکالر به update داده می‌شوند؛ روابط جداگانه مدیریت می‌شوند.
     // فیلدهای ارسال‌نشده (undefined/null) یا رشته‌ی خالی نادیده گرفته می‌شوند تا
     // مقدار قبلی محصول حفظ شود (به‌جای بازنویسی با مقدار خالی).
-    const { attributes, images: _img, ...scalar } = dto;
+    const { attributes, categoryIds, images: _img, ...scalar } = dto;
     const patch = Object.fromEntries(
       Object.entries(scalar).filter(
         ([, v]) => v !== undefined && v !== null && v !== "",
@@ -270,6 +556,13 @@ export class ProductsService {
     }
 
     await this.syncAttributes(id, attributes);
+    const primaryCategory = await this.syncCategories(id, categoryIds);
+    // اگر categoryId صریح فرستاده نشده ولی دسته‌ها تغییر کرده‌اند، دسته‌ی اصلی را هم‌راستا کن
+    if (categoryIds !== undefined && patch.categoryId === undefined) {
+      await this.productRepository.update(id, {
+        categoryId: primaryCategory ?? undefined,
+      });
+    }
 
     if (files?.length) {
       const hasImages = (existing.images?.length ?? 0) > 0;

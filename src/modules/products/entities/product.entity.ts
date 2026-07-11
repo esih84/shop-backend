@@ -5,11 +5,14 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
+  ManyToMany,
+  JoinTable,
   OneToMany,
   JoinColumn,
   Index,
 } from 'typeorm';
 import { Category } from '../../categories/entities/category.entity';
+import { Brand } from '../../brands/entities/brand.entity';
 import { ProductImage } from './product-image.entity';
 import { ProductAttribute } from './product-attribute.entity';
 import { Discount } from './discount.entity';
@@ -58,6 +61,28 @@ export class Product {
   @ManyToOne(() => Category, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'category_id' })
   category?: Category;
+
+  /** برند محصول (هر محصول حداکثر یک برند دارد). */
+  @Index()
+  @Column({ name: 'brand_id', nullable: true })
+  brandId?: string;
+
+  @ManyToOne(() => Brand, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'brand_id' })
+  brand?: Brand;
+
+  /**
+   * دسته‌های محصول (چند‌مقداری). یک محصول می‌تواند زیرمجموعه‌ی چند دسته باشد.
+   * `category`/`categoryId` بالا همچنان دسته‌ی «اصلی» (برای breadcrumb/سازگاری) است
+   * و معمولاً اولین عضو همین مجموعه است.
+   */
+  @ManyToMany(() => Category, { cascade: false })
+  @JoinTable({
+    name: 'product_categories',
+    joinColumn: { name: 'product_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'category_id', referencedColumnName: 'id' },
+  })
+  categories: Category[];
 
   @OneToMany(() => ProductImage, (i) => i.product, { cascade: true })
   images: ProductImage[];

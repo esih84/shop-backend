@@ -9,10 +9,12 @@ import {
   Param,
   Query,
   UseInterceptors,
+  UploadedFile,
   UploadedFiles,
 } from "@nestjs/common";
-import { FilesInterceptor } from "@nestjs/platform-express";
+import { FileInterceptor, FilesInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
+import { excelFileValidationPipe } from "./excel-file.validation";
 import {
   ApiBearerAuth,
   ApiTags,
@@ -46,6 +48,15 @@ export class ProductsController {
     return this.productsService.findAll(filter);
   }
 
+  @Get("discounted")
+  @Public()
+  @ApiOperation({
+    summary: "List products that currently have an active discount (offers)",
+  })
+  findDiscounted(@Query() filter: FilterProductsDto) {
+    return this.productsService.findDiscounted(filter);
+  }
+
   @Get("admin/all")
   @Roles(Role.ADMIN)
   @ApiBearerAuth("access-token")
@@ -64,6 +75,20 @@ export class ProductsController {
   })
   findOneAdmin(@Param("id") id: string) {
     return this.productsService.findByIdAdmin(id);
+  }
+
+  @Post("import")
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth("access-token")
+  @ApiConsumes("multipart/form-data")
+  @ApiOperation({
+    summary: "ورود گروهی محصولات از فایل اکسل (admin)",
+  })
+  @UseInterceptors(FileInterceptor("file", { storage: memoryStorage() }))
+  importFromExcel(
+    @UploadedFile(excelFileValidationPipe) file: Express.Multer.File,
+  ) {
+    return this.productsService.importFromExcel(file.buffer);
   }
 
   @Get(":slug")

@@ -8,6 +8,7 @@ import {
   emptyToUndefined,
   toBoolean,
   toNumber,
+  parseJsonArray,
 } from '../../../common/transforms';
 import { DiscountType } from '../entities/discount.entity';
 
@@ -53,7 +54,22 @@ export class CreateProductDto {
   @IsOptional() @Transform(toNumber) @IsNumber() @Min(0) stock?: number;
   @ApiPropertyOptional({ description: 'کد محصول (اختیاری، یکتا)' })
   @IsOptional() @Transform(emptyToUndefined) @IsString() sku?: string;
-  @ApiPropertyOptional() @IsOptional() @Transform(emptyToUndefined) @IsUUID() categoryId?: string;
+  @ApiPropertyOptional({ description: 'دسته‌ی اصلی (اختیاری؛ اگر خالی باشد اولین عضو categoryIds)' })
+  @IsOptional() @Transform(emptyToUndefined) @IsUUID() categoryId?: string;
+
+  @ApiPropertyOptional({ description: 'برند محصول (اختیاری)' })
+  @IsOptional() @Transform(emptyToUndefined) @IsUUID() brandId?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'دسته‌های محصول (چند‌مقداری). در حالت multipart رشته‌ی JSON.',
+  })
+  @IsOptional()
+  @Transform(parseJsonArray)
+  @IsArray()
+  @IsUUID('all', { each: true })
+  categoryIds?: string[];
+
   @ApiPropertyOptional() @IsOptional() @Transform(toBoolean) @IsBoolean() isActive?: boolean;
 
   @ApiPropertyOptional({ type: [CreateAttributeDto], description: 'در حالت multipart به‌صورت رشته‌ی JSON ارسال شود' })
@@ -136,6 +152,12 @@ export class FilterProductsDto {
 
   @ApiPropertyOptional({ description: 'فیلتر بر اساس slug دسته (شامل زیردسته‌ها)' })
   @IsOptional() @IsString() categorySlug?: string;
+
+  @ApiPropertyOptional({ description: 'فیلتر بر اساس شناسه‌ی برند' })
+  @IsOptional() @IsUUID() brandId?: string;
+
+  @ApiPropertyOptional({ description: 'فیلتر بر اساس slug برند' })
+  @IsOptional() @IsString() brandSlug?: string;
 
   @ApiPropertyOptional({ description: 'حداقل قیمت' })
   @IsOptional() @Transform(toNumber) @IsNumber() minPrice?: number;
