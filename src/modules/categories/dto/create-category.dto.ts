@@ -1,5 +1,7 @@
 import { IsString, IsOptional, IsBoolean, IsInt, IsUUID } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { toBoolean, toNumber, emptyToUndefined } from '../../../common/transforms';
 
 export class CreateCategoryDto {
   @ApiProperty()
@@ -22,16 +24,25 @@ export class CreateCategoryDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(emptyToUndefined)
   @IsUUID()
   parentId?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'ترتیب نمایش (عدد کوچک‌تر = بالاتر)' })
   @IsOptional()
+  @Transform(toNumber)
   @IsInt()
   order?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Transform(toBoolean)
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({ description: 'نمایش در بخش دسته‌بندی صفحه‌ی اصلی' })
+  @IsOptional()
+  @Transform(toBoolean)
+  @IsBoolean()
+  isFeatured?: boolean;
 }

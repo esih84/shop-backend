@@ -38,6 +38,11 @@ export class Category {
   @Column({ default: true })
   isActive: boolean;
 
+  /** نمایش در بخش دسته‌بندی صفحه‌ی اصلی (برای زیردسته‌های منتخب هم استفاده می‌شود). */
+  @Index()
+  @Column({ name: 'is_featured', default: false })
+  isFeatured: boolean;
+
   @TreeChildren()
   children: Category[];
 

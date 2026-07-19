@@ -37,6 +37,17 @@ export class CategoriesService {
     return this.categoryRepository.findTrees();
   }
 
+  /**
+   * دسته‌های منتخب (isFeatured) و فعال — به‌صورت لیست تخت از هر سطح درخت،
+   * مرتب بر اساس order. برای بخش دسته‌بندی صفحه‌ی اصلی.
+   */
+  async findFeatured(): Promise<Category[]> {
+    return this.categoryRepository.find({
+      where: { isActive: true, isFeatured: true },
+      order: { order: "ASC" },
+    });
+  }
+
   async findById(id: string): Promise<Category> {
     const category = await this.categoryRepository.findOne({ where: { id } });
     if (!category) throw new NotFoundException("Category not found");

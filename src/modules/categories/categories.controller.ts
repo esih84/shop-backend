@@ -35,6 +35,15 @@ export class CategoriesController {
     return this.categoriesService.findAll();
   }
 
+  @Get('featured')
+  @Public()
+  @ApiOperation({
+    summary: 'دسته‌های منتخب برای نمایش در صفحه‌ی اصلی (لیست تخت، هر سطح)',
+  })
+  findFeatured() {
+    return this.categoriesService.findFeatured();
+  }
+
   @Get(':slug')
   @Public()
   @ApiOperation({ summary: 'Get category by slug' })
