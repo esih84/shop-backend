@@ -48,12 +48,21 @@ export class BlogsService {
     return blog;
   }
 
+  async findById(id: string): Promise<Blog> {
+    const blog = await this.blogRepository.findOne({ where: { id } });
+    if (!blog) throw new NotFoundException("Blog not found");
+    return blog;
+  }
+
   async update(id: string, dto: Partial<CreateBlogDto>): Promise<Blog> {
+    const existing = await this.findById(id);
+    // فقط در «اولین انتشار» تاریخ انتشار را ثبت کن، نه در هر ویرایش.
+    const firstPublish = dto.isPublished && !existing.isPublished;
     await this.blogRepository.update(id, {
       ...dto,
-      ...(dto.isPublished ? { publishedAt: new Date() } : {}),
+      ...(firstPublish ? { publishedAt: new Date() } : {}),
     });
-    return this.findBySlug(id);
+    return this.findById(id);
   }
 
   async remove(id: string): Promise<void> {
