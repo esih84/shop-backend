@@ -21,8 +21,13 @@ async function bootstrap() {
 
   // Security
   app.use(helmet());
+  // در production فهرست origin‌های مجاز (فروشگاه + داشبورد) از CORS_ORIGINS خوانده می‌شود.
+  const corsOrigins = (configService.get<string>("app.corsOrigins") || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   app.enableCors({
-    origin: nodeEnv === "production" ? configService.get("app.url") : true,
+    origin: nodeEnv === "production" ? corsOrigins : true,
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "Accept-Language"],

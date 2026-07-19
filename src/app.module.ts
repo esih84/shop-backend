@@ -133,12 +133,14 @@ import { CrmModule } from "./modules/crm/crm.module";
           SmsMessage,
           SmsCampaign,
         ],
-        synchronize: config.get("app.nodeEnv") !== "production",
+        // به‌صورت پیش‌فرض جز در production؛ با DB_SYNCHRONIZE قابل override.
+        synchronize:
+          (process.env.DB_SYNCHRONIZE ??
+            String(config.get("app.nodeEnv") !== "production")) === "true",
         logging: config.get("app.nodeEnv") === "development",
+        // Postgres داخلی (کانتینر) معمولاً SSL ندارد؛ فقط اگر DB_SSL=true باشد فعال می‌شود.
         ssl:
-          config.get("app.nodeEnv") === "production"
-            ? { rejectUnauthorized: false }
-            : false,
+          process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : false,
       }),
     }),
 

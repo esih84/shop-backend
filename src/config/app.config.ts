@@ -6,6 +6,8 @@ export default registerAs("app", () => ({
   url: process.env.APP_URL || "http://localhost:3000",
   // آدرس فروشگاه (فرانت) برای بازگشت کاربر پس از پرداخت
   frontendUrl: process.env.FRONTEND_URL || "http://localhost:3001",
+  // فهرست origin‌های مجاز CORS در production (با کاما جدا؛ فروشگاه + داشبورد)
+  corsOrigins: process.env.CORS_ORIGINS || "",
 
   // OTP
   otpExpiryMinutes: parseInt(process.env.OTP_EXPIRY_MINUTES || "5", 10),
