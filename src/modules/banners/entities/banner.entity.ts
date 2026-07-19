@@ -26,6 +26,10 @@ export class Banner {
   @Column({ nullable: true })
   link?: string;
 
+  /** متن دکمه‌ی روی بنر؛ خالی باشد دکمه نمایش داده نمی‌شود */
+  @Column({ name: "button_text", nullable: true })
+  buttonText?: string;
+
   @Column({ default: "home_main" })
   position: string;
 

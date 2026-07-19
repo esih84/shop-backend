@@ -24,6 +24,12 @@ export class CreateBannerDto {
   imageUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() mobileImageUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() link?: string;
+  @ApiPropertyOptional({
+    description: "متن دکمه‌ی روی بنر؛ خالی باشد دکمه نمایش داده نمی‌شود",
+  })
+  @IsOptional()
+  @IsString()
+  buttonText?: string;
   @ApiPropertyOptional({ enum: BANNER_POSITIONS })
   @IsOptional()
   @IsIn(BANNER_POSITIONS)
