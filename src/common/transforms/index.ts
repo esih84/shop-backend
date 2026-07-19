@@ -47,3 +47,18 @@ export const parseJsonArray = ({ value }: TransformArg) => {
     return value;
   }
 };
+
+/**
+ * رشته‌ی CSV مثل `"a,b,c"` را (که از query params می‌آید) به آرایه تبدیل می‌کند.
+ * خالی → undefined؛ آرایه دست‌نخورده برمی‌گردد (اگر پارامتر تکراری داده شده باشد).
+ */
+export const parseCsv = ({ value }: TransformArg) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (trimmed === "") return undefined;
+  return trimmed
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+};

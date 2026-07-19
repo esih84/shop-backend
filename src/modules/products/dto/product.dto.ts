@@ -1,6 +1,6 @@
 import {
   IsString, IsOptional, IsBoolean, IsNumber, IsUUID, IsArray,
-  ValidateNested, Min, IsNotEmpty, IsEnum, IsDateString,
+  ValidateNested, Min, IsNotEmpty, IsEnum, IsDateString, IsIn,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
@@ -9,6 +9,7 @@ import {
   toBoolean,
   toNumber,
   parseJsonArray,
+  parseCsv,
 } from '../../../common/transforms';
 import { DiscountType } from '../entities/discount.entity';
 
@@ -71,6 +72,9 @@ export class CreateProductDto {
   categoryIds?: string[];
 
   @ApiPropertyOptional() @IsOptional() @Transform(toBoolean) @IsBoolean() isActive?: boolean;
+
+  @ApiPropertyOptional({ description: 'ترتیب نمایش (عدد بزرگ‌تر = بالاتر)' })
+  @IsOptional() @Transform(toNumber) @IsNumber() displayOrder?: number;
 
   @ApiPropertyOptional({ type: [CreateAttributeDto], description: 'در حالت multipart به‌صورت رشته‌ی JSON ارسال شود' })
   @IsOptional()
@@ -147,17 +151,33 @@ export class CreateDiscountDto {
 }
 
 export class FilterProductsDto {
-  @ApiPropertyOptional({ description: 'فیلتر بر اساس شناسه‌ی دسته' })
+  @ApiPropertyOptional({ description: 'فیلتر بر اساس شناسه‌ی دسته (تکی)' })
   @IsOptional() @IsUUID() categoryId?: string;
 
-  @ApiPropertyOptional({ description: 'فیلتر بر اساس slug دسته (شامل زیردسته‌ها)' })
+  @ApiPropertyOptional({ description: 'فیلتر بر اساس slug دسته (تکی؛ شامل زیردسته‌ها)' })
   @IsOptional() @IsString() categorySlug?: string;
 
-  @ApiPropertyOptional({ description: 'فیلتر بر اساس شناسه‌ی برند' })
+  @ApiPropertyOptional({ description: 'فیلتر چند دسته با شناسه (CSV یا آرایه)' })
+  @IsOptional() @Transform(parseCsv) @IsArray() @IsUUID('all', { each: true })
+  categoryIds?: string[];
+
+  @ApiPropertyOptional({ description: 'فیلتر چند دسته با slug (CSV یا آرایه)' })
+  @IsOptional() @Transform(parseCsv) @IsArray() @IsString({ each: true })
+  categorySlugs?: string[];
+
+  @ApiPropertyOptional({ description: 'فیلتر بر اساس شناسه‌ی برند (تکی)' })
   @IsOptional() @IsUUID() brandId?: string;
 
-  @ApiPropertyOptional({ description: 'فیلتر بر اساس slug برند' })
+  @ApiPropertyOptional({ description: 'فیلتر بر اساس slug برند (تکی)' })
   @IsOptional() @IsString() brandSlug?: string;
+
+  @ApiPropertyOptional({ description: 'فیلتر چند برند با شناسه (CSV یا آرایه)' })
+  @IsOptional() @Transform(parseCsv) @IsArray() @IsUUID('all', { each: true })
+  brandIds?: string[];
+
+  @ApiPropertyOptional({ description: 'فیلتر چند برند با slug (CSV یا آرایه)' })
+  @IsOptional() @Transform(parseCsv) @IsArray() @IsString({ each: true })
+  brandSlugs?: string[];
 
   @ApiPropertyOptional({ description: 'حداقل قیمت' })
   @IsOptional() @Transform(toNumber) @IsNumber() minPrice?: number;
@@ -165,16 +185,26 @@ export class FilterProductsDto {
   @ApiPropertyOptional({ description: 'حداکثر قیمت' })
   @IsOptional() @Transform(toNumber) @IsNumber() maxPrice?: number;
 
-  @ApiPropertyOptional({ description: 'جست‌وجو در نام/توضیحات/کد محصول' })
+  @ApiPropertyOptional({ description: 'جست‌وجو در نام/توضیحات/کد محصول/اسلاگ' })
   @IsOptional() @IsString() search?: string;
 
   @ApiPropertyOptional({ description: 'فقط کالاهای موجود' })
   @IsOptional() @Transform(toBoolean) @IsBoolean() inStock?: boolean;
 
+  @ApiPropertyOptional({ enum: ['in_stock', 'out_of_stock', 'low_stock'], description: 'وضعیت موجودی' })
+  @IsOptional() @IsIn(['in_stock', 'out_of_stock', 'low_stock'])
+  stockStatus?: 'in_stock' | 'out_of_stock' | 'low_stock';
+
+  @ApiPropertyOptional({ description: 'فقط محصولات دارای تخفیف فعال (true) یا بدون تخفیف (false)' })
+  @IsOptional() @Transform(toBoolean) @IsBoolean() hasDiscount?: boolean;
+
+  @ApiPropertyOptional({ description: 'فیلتر بر اساس فعال/غیرفعال (ادمین)' })
+  @IsOptional() @Transform(toBoolean) @IsBoolean() isActive?: boolean;
+
   @ApiPropertyOptional() @IsOptional() @Transform(toNumber) @IsNumber() page?: number;
   @ApiPropertyOptional() @IsOptional() @Transform(toNumber) @IsNumber() limit?: number;
 
-  @ApiPropertyOptional({ description: 'createdAt | basePrice | name', default: 'createdAt' })
+  @ApiPropertyOptional({ description: 'createdAt | basePrice | name | displayOrder', default: 'displayOrder' })
   @IsOptional() @IsString() sortBy?: string;
 
   @ApiPropertyOptional({ enum: ['ASC', 'DESC'], default: 'DESC' })

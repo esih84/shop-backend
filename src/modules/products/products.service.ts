@@ -14,6 +14,7 @@ import { Product } from "./entities/product.entity";
 import { ProductImage } from "./entities/product-image.entity";
 import { ProductAttribute } from "./entities/product-attribute.entity";
 import { Discount, DiscountType } from "./entities/discount.entity";
+import { computeEffectivePrice } from "./product-pricing.util";
 import { Category } from "../categories/entities/category.entity";
 import {
   CreateProductDto,
@@ -30,6 +31,9 @@ export interface ImportProductsResult {
   skipped: number;
   errors: { row: number; reason: string }[];
 }
+
+/** آستانه‌ی «رو به اتمام» موجودی (هم‌راستا با low-stock در overview داشبورد). */
+const LOW_STOCK_THRESHOLD = 10;
 
 interface ExcelColumnMap {
   name?: number;
@@ -85,30 +89,13 @@ export class ProductsService implements OnModuleInit {
    * سپس `discountedPrice` و `activeDiscount` را روی محصول ست می‌کند تا در پاسخ بیاید.
    */
   private applyDiscount(product: Product): Product {
-    const now = Date.now();
-    const base = Number(product.basePrice);
-    let bestPrice = base;
-    let best: Discount | null = null;
-
-    for (const d of product.discounts ?? []) {
-      if (!d.isActive) continue;
-      if (d.startDate && new Date(d.startDate).getTime() > now) continue;
-      if (d.endDate && new Date(d.endDate).getTime() < now) continue;
-      const price =
-        d.type === DiscountType.PERCENTAGE
-          ? base - (base * Number(d.value)) / 100
-          : base - Number(d.value);
-      const clamped = Math.max(0, Math.round(price));
-      if (clamped < bestPrice) {
-        bestPrice = clamped;
-        best = d;
-      }
-    }
-
-    (product as Product & { discountedPrice: number }).discountedPrice =
-      bestPrice;
+    const { price, activeDiscount } = computeEffectivePrice(
+      Number(product.basePrice),
+      product.discounts,
+    );
+    (product as Product & { discountedPrice: number }).discountedPrice = price;
     (product as Product & { activeDiscount: Discount | null }).activeDiscount =
-      best;
+      activeDiscount;
     return product;
   }
 
@@ -382,41 +369,86 @@ export class ProductsService implements OnModuleInit {
 
     // مسیر عمومی فقط محصولات فعال؛ مسیر ادمین همه را برمی‌گرداند
     if (!includeInactive) qb.andWhere("p.isActive = true");
+    // فیلتر صریح فعال/غیرفعال (برای پنل ادمین)
+    if (filter.isActive !== undefined)
+      qb.andWhere("p.isActive = :isActive", { isActive: filter.isActive });
 
     // فیلتر دسته بر اساس رابطه‌ی چند‌مقداری product_categories (نه فقط دسته‌ی اصلی)
-    // با EXISTS تا getManyAndCount ردیف تکراری نسازد.
-    if (filter.categoryId)
+    // با EXISTS تا getManyAndCount ردیف تکراری نسازد. آرایه‌ها اولویت دارند.
+    if (filter.categoryIds?.length)
+      qb.andWhere(
+        "EXISTS (SELECT 1 FROM product_categories pc WHERE pc.product_id = p.id AND pc.category_id IN (:...categoryIds))",
+        { categoryIds: filter.categoryIds },
+      );
+    else if (filter.categoryId)
       qb.andWhere(
         "EXISTS (SELECT 1 FROM product_categories pc WHERE pc.product_id = p.id AND pc.category_id = :categoryId)",
         { categoryId: filter.categoryId },
       );
-    if (filter.categorySlug)
+    if (filter.categorySlugs?.length)
+      qb.andWhere(
+        "EXISTS (SELECT 1 FROM product_categories pc JOIN categories c ON c.id = pc.category_id WHERE pc.product_id = p.id AND c.slug IN (:...categorySlugs))",
+        { categorySlugs: filter.categorySlugs },
+      );
+    else if (filter.categorySlug)
       qb.andWhere(
         "EXISTS (SELECT 1 FROM product_categories pc JOIN categories c ON c.id = pc.category_id WHERE pc.product_id = p.id AND c.slug = :categorySlug)",
         { categorySlug: filter.categorySlug },
       );
-    if (filter.brandId)
+
+    if (filter.brandIds?.length)
+      qb.andWhere("p.brandId IN (:...brandIds)", { brandIds: filter.brandIds });
+    else if (filter.brandId)
       qb.andWhere("p.brandId = :brandId", { brandId: filter.brandId });
-    if (filter.brandSlug)
+    if (filter.brandSlugs?.length)
+      qb.andWhere("brand.slug IN (:...brandSlugs)", {
+        brandSlugs: filter.brandSlugs,
+      });
+    else if (filter.brandSlug)
       qb.andWhere("brand.slug = :brandSlug", { brandSlug: filter.brandSlug });
+
     if (filter.minPrice !== undefined)
       qb.andWhere("p.basePrice >= :minPrice", { minPrice: filter.minPrice });
     if (filter.maxPrice !== undefined)
       qb.andWhere("p.basePrice <= :maxPrice", { maxPrice: filter.maxPrice });
-    if (filter.inStock) qb.andWhere("p.stock > 0");
+
+    // وضعیت موجودی (موجود/ناموجود/رو به اتمام). `inStock` قدیمی هم پشتیبانی می‌شود.
+    if (filter.stockStatus === "in_stock") qb.andWhere("p.stock > 0");
+    else if (filter.stockStatus === "out_of_stock")
+      qb.andWhere("p.stock <= 0");
+    else if (filter.stockStatus === "low_stock")
+      qb.andWhere("p.stock > 0 AND p.stock < :low", {
+        low: LOW_STOCK_THRESHOLD,
+      });
+    else if (filter.inStock) qb.andWhere("p.stock > 0");
+
+    // تخفیف‌دار بودن (تخفیف فعال در بازه‌ی تاریخ) — مثل findDiscounted.
+    if (filter.hasDiscount === true)
+      qb.andWhere(
+        `EXISTS (SELECT 1 FROM discounts d WHERE d.product_id = p.id AND d.is_active = true AND d.start_date <= NOW() AND d.end_date >= NOW())`,
+      );
+    else if (filter.hasDiscount === false)
+      qb.andWhere(
+        `NOT EXISTS (SELECT 1 FROM discounts d WHERE d.product_id = p.id AND d.is_active = true AND d.start_date <= NOW() AND d.end_date >= NOW())`,
+      );
+
     if (filter.search) {
       qb.andWhere(
-        "(p.name ILIKE :search OR p.description ILIKE :search OR p.sku ILIKE :search)",
+        "(p.name ILIKE :search OR p.description ILIKE :search OR p.sku ILIKE :search OR p.slug ILIKE :search)",
         { search: `%${filter.search}%` },
       );
     }
 
-    const sortBy = ["createdAt", "basePrice", "name"].includes(
-      filter.sortBy ?? "",
-    )
-      ? `p.${filter.sortBy}`
-      : "p.createdAt";
-    qb.orderBy(sortBy, filter.sortOrder === "ASC" ? "ASC" : "DESC");
+    // مرتب‌سازی: اگر ستون معتبری داده شد از آن استفاده کن (با displayOrder به‌عنوان
+    // tiebreak)، وگرنه پیش‌فرض = displayOrder DESC سپس createdAt DESC (تا پین‌کردن کار کند).
+    const dir = filter.sortOrder === "ASC" ? "ASC" : "DESC";
+    if (["createdAt", "basePrice", "name", "displayOrder"].includes(filter.sortBy ?? "")) {
+      qb.orderBy(`p.${filter.sortBy}`, dir);
+      if (filter.sortBy !== "displayOrder")
+        qb.addOrderBy("p.displayOrder", "DESC");
+    } else {
+      qb.orderBy("p.displayOrder", "DESC").addOrderBy("p.createdAt", "DESC");
+    }
     qb.skip((page - 1) * limit).take(limit);
 
     const [items, total] = await qb.getManyAndCount();
@@ -450,7 +482,8 @@ export class ProductsService implements OnModuleInit {
              AND d.end_date >= NOW()
          )`,
       )
-      .orderBy("p.createdAt", "DESC")
+      .orderBy("p.displayOrder", "DESC")
+      .addOrderBy("p.createdAt", "DESC")
       .skip((page - 1) * limit)
       .take(limit);
 

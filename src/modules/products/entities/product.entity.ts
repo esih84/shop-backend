@@ -54,6 +54,11 @@ export class Product {
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 
+  /** ترتیب نمایش دستی (عدد بزرگ‌تر = بالاتر). برای پین‌کردن محصولات خاص. */
+  @Index()
+  @Column({ name: 'display_order', type: 'int', default: 0 })
+  displayOrder: number;
+
   @Index()
   @Column({ name: 'category_id', nullable: true })
   categoryId?: string;
