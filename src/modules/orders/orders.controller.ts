@@ -1,8 +1,6 @@
-import { Controller, Get, Post, Put, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Put, Body, Param, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
-import { IsEnum } from 'class-validator';
 import { OrdersService } from './orders.service';
-import { CreateOrderDto } from './dto/order.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles, Role } from '../../common/decorators/roles.decorator';
 import { User } from '../users/entities/user.entity';
@@ -14,11 +12,8 @@ import { OrderStatus } from './entities/order.entity';
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
-  @Post()
-  @ApiOperation({ summary: 'Create order from cart' })
-  create(@CurrentUser() user: User, @Body() dto: CreateOrderDto) {
-    return this.ordersService.createFromCart(user, dto);
-  }
+  // ثبت سفارش دیگر endpoint مستقلی ندارد؛ ساخت سفارش از سبد فقط از مسیر چک‌اوت
+  // پرداخت انجام می‌شود (POST /payments) تا سفارش و پرداخت یک واحد باشند.
 
   @Get()
   @ApiOperation({ summary: 'Get user orders' })

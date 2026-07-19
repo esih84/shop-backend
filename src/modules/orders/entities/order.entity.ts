@@ -22,6 +22,12 @@ export enum OrderStatus {
   REFUNDED = 'refunded',
 }
 
+/** روش‌های حمل‌ونقل. افزودن روش جدید = یک خط اینجا + یک آیتم در SHIPPING_METHODS فرانت. */
+export enum ShippingMethod {
+  TIPAX = 'tipax',
+  POST = 'post',
+}
+
 @Entity('orders')
 export class Order {
   @PrimaryGeneratedColumn('uuid')
@@ -82,6 +88,14 @@ export class Order {
 
   @Column({ type: 'jsonb', name: 'shipping_address', nullable: true })
   shippingAddress?: Record<string, unknown>;
+
+  @Column({
+    type: 'enum',
+    enum: ShippingMethod,
+    name: 'shipping_method',
+    nullable: true,
+  })
+  shippingMethod?: ShippingMethod;
 
   /** زمان پرداخت موفق (برای گزارش recency/monetary و دوره‌ی بازگشت خرید). */
   @Column({ name: 'paid_at', type: 'timestamptz', nullable: true })

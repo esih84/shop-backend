@@ -35,4 +35,10 @@ export class OrderItem {
 
   @Column({ name: 'total_price', type: 'decimal', precision: 12, scale: 2 })
   totalPrice: number;
+
+  /**
+   * تصویر شاخص محصول — ستون دیتابیس نیست؛ فقط هنگام خواندن جزئیات سفارش
+   * (findById) از جدول product_images پُر و در پاسخ JSON برگردانده می‌شود.
+   */
+  productImage?: string;
 }

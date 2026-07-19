@@ -1,44 +1,64 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { DataSource, Repository } from "typeorm";
 import { Order, OrderStatus } from "../orders/entities/order.entity";
 import { User } from "../users/entities/user.entity";
 import { Payment, PaymentStatus } from "./entities/payment.entity";
 import { ZarinpalService } from "./zarinpal.service";
 import { CrmService } from "../crm/crm.service";
 import { SmsNotificationsService } from "../sms/sms-notifications.service";
+import { OrdersService } from "../orders/orders.service";
+import { CreateOrderDto } from "../orders/dto/order.dto";
 
 @Injectable()
 export class PaymentService {
+  private readonly logger = new Logger(PaymentService.name);
+
   constructor(
     @InjectRepository(Payment)
     private readonly paymentRepo: Repository<Payment>,
-    @InjectRepository(Order)
-    private readonly orderRepo: Repository<Order>,
     private readonly zarinpal: ZarinpalService,
     private readonly config: ConfigService,
     private readonly crmService: CrmService,
     private readonly smsNotifications: SmsNotificationsService,
+    private readonly ordersService: OrdersService,
+    private readonly dataSource: DataSource,
   ) {}
 
-  /** ساخت تراکنش برای یک سفارش و گرفتن آدرس درگاه. */
+  /**
+   * چک‌اوت یک‌مرحله‌ای (مثل اسنپ‌فود): از روی سبد کاربر سفارش PENDING می‌سازد،
+   * سپس تراکنش پرداخت را ساخته و آدرس درگاه را برمی‌گرداند — همه در یک درخواست.
+   * مصرف منابع (موجودی/کوپن/امتیاز/سبد) هنگام تأیید موفق پرداخت انجام می‌شود، نه اینجا.
+   */
+  async checkout(
+    user: User,
+    dto: CreateOrderDto,
+  ): Promise<{ gatewayUrl: string; authority: string; orderId: string }> {
+    const order = await this.ordersService.createFromCart(user, dto);
+    return this.startPayment(user, order);
+  }
+
+  /**
+   * پرداخت مجدد یک سفارشِ موجودِ PENDING (برای دکمه‌ی «تلاش مجدد پرداخت»).
+   * سفارش تازه‌ای ساخته نمی‌شود؛ فقط برای همان سفارش تراکنش جدید می‌سازد.
+   */
   async createForOrder(
     user: User,
     orderId: string,
-  ): Promise<{ gatewayUrl: string; authority: string }> {
-    const order = await this.orderRepo.findOne({ where: { id: orderId } });
-    if (!order || order.userId !== user.id) {
-      throw new NotFoundException("سفارش یافت نشد");
-    }
+  ): Promise<{ gatewayUrl: string; authority: string; orderId: string }> {
+    const order = await this.ordersService.findById(orderId, user.id);
     if (order.status !== OrderStatus.PENDING) {
       throw new BadRequestException("این سفارش قابل پرداخت نیست");
     }
+    return this.startPayment(user, order);
+  }
 
+  /** ساخت رکورد پرداخت برای یک سفارش و گرفتن آدرس درگاه زرین‌پال. */
+  private async startPayment(
+    user: User,
+    order: Order,
+  ): Promise<{ gatewayUrl: string; authority: string; orderId: string }> {
     const amount = Number(order.finalAmount);
     if (!(amount > 0)) {
       throw new BadRequestException("مبلغ سفارش نامعتبر است");
@@ -65,7 +85,7 @@ export class PaymentService {
     payment.authority = authority;
     await this.paymentRepo.save(payment);
 
-    return { gatewayUrl, authority };
+    return { gatewayUrl, authority, orderId: order.id };
   }
 
   /**
@@ -112,14 +132,51 @@ export class PaymentService {
       return failUrl;
     }
 
+    // مصرف منابع (موجودی/کوپن/امتیاز/سبد) + CONFIRMED شدن سفارش + PAID شدن پرداخت،
+    // همه در یک تراکنش اتمیک. اگر موجودی لحظه‌ی پرداخت کافی نباشد کل تراکنش rollback می‌شود.
     const paidAt = new Date();
-    payment.status = PaymentStatus.PAID;
-    payment.refId = result.refId;
-    await this.paymentRepo.save(payment);
-    await this.orderRepo.update(orderId, {
-      status: OrderStatus.CONFIRMED,
-      paidAt,
-    });
+    let confirmed: boolean;
+    try {
+      confirmed = await this.dataSource.transaction(async (manager) => {
+        const order = await manager.findOne(Order, {
+          where: { id: orderId },
+          lock: { mode: "pessimistic_write" },
+        });
+        // idempotency: اگر سفارش دیگر PENDING نباشد (مثلاً callback تکراری) دوباره مصرف نمی‌کنیم.
+        if (!order || order.status !== OrderStatus.PENDING) {
+          return false;
+        }
+        await this.ordersService.confirmPaidOrder(manager, order, paidAt);
+        await manager.update(Payment, payment.id, {
+          status: PaymentStatus.PAID,
+          refId: result.refId,
+        });
+        return true;
+      });
+    } catch (err) {
+      // پرداخت در درگاه موفق بوده ولی تأیید سفارش شکست خورد (مثلاً اتمام موجودی لحظه‌ی پرداخت).
+      // کل تراکنش rollback شده و داده نیم‌بند نمانده؛ اما پول گرفته شده و نیاز به بازگشت‌وجه دستی است.
+      this.logger.error(
+        `تأیید سفارش ${orderId} پس از پرداخت موفق ${payment.id} شکست خورد — نیازمند بازگشت‌وجه دستی`,
+        err instanceof Error ? err.stack : String(err),
+      );
+      return failUrl;
+    }
+
+    if (!confirmed) {
+      // سفارش دیگر PENDING نبود. اگر پرداخت قبلاً PAID شده (callback موازی/تکراری) نتیجه موفق است؛
+      // در غیر این صورت پول در درگاه گرفته شده ولی سفارش قابل‌تأیید نیست و نیازمند بازگشت‌وجه دستی است.
+      const fresh = await this.paymentRepo.findOne({
+        where: { id: payment.id },
+      });
+      if (fresh?.status === PaymentStatus.PAID) {
+        return successUrl(fresh.refId);
+      }
+      this.logger.error(
+        `پرداخت ${payment.id} در درگاه موفق شد ولی سفارش ${orderId} قابل‌تأیید نبود (وضعیت ≠ PENDING) — نیازمند بازگشت‌وجه/رسیدگی دستی`,
+      );
+      return failUrl;
+    }
 
     // به‌روزرسانی RFM و ارسال پیامک تأیید خرید — هیچ‌کدام نباید جریان پرداخت را بشکند
     try {

@@ -13,6 +13,7 @@ import { UserLoyalty } from '../loyalty/entities/user-loyalty.entity';
 import { PointTransaction } from '../loyalty/entities/point-transaction.entity';
 import { PetsModule } from '../pets/pets.module';
 import { SmsModule } from '../sms/sms.module';
+import { CartModule } from '../cart/cart.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { SmsModule } from '../sms/sms.module';
     ]),
     PetsModule,
     SmsModule,
+    CartModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

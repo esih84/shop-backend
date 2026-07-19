@@ -5,12 +5,15 @@ import {
   OnModuleInit,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, DataSource } from "typeorm";
+import { Repository, DataSource, EntityManager, In } from "typeorm";
 import { Order, OrderStatus } from "./entities/order.entity";
 import { OrderItem } from "./entities/order-item.entity";
 import { Cart } from "../cart/entities/cart.entity";
 import { CartItem } from "../cart/entities/cart-item.entity";
+import { CartService } from "../cart/cart.service";
 import { Product } from "../products/entities/product.entity";
+import { computeEffectivePrice } from "../products/product-pricing.util";
+import { ProductImage } from "../products/entities/product-image.entity";
 import { Coupon } from "../coupons/entities/coupon.entity";
 import { CouponUsage } from "../coupons/entities/coupon-usage.entity";
 import { UserLoyalty } from "../loyalty/entities/user-loyalty.entity";
@@ -30,8 +33,7 @@ export class OrdersService implements OnModuleInit {
   constructor(
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
-    @InjectRepository(Cart)
-    private readonly cartRepository: Repository<Cart>,
+    private readonly cartService: CartService,
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
     @InjectRepository(Coupon)
@@ -55,10 +57,7 @@ export class OrdersService implements OnModuleInit {
   }
 
   async createFromCart(user: User, dto: CreateOrderDto): Promise<Order> {
-    const cart = await this.cartRepository.findOne({
-      where: { userId: user.id },
-      relations: { items: { product: true } },
-    });
+    const cart = await this.cartService.getOrCreateCart(user.id);
 
     if (!cart?.items?.length) {
       throw new BadRequestException("Cart is empty");
@@ -69,11 +68,12 @@ export class OrdersService implements OnModuleInit {
       let discountAmount = 0;
       const orderItems: Partial<OrderItem>[] = [];
 
-      // Validate stock and calculate total
+      // فقط اعتبارسنجی و محاسبه‌ی مبالغ (snapshot). موجودی اینجا کم نمی‌شود؛
+      // مصرف منابع فقط هنگام تأیید موفق پرداخت در confirmPaidOrder انجام می‌گیرد.
       for (const item of cart.items) {
         const product = await manager.findOne(Product, {
           where: { id: item.productId },
-          lock: { mode: "pessimistic_write" },
+          relations: { discounts: true },
         });
 
         if (!product || !product.isActive) {
@@ -87,20 +87,20 @@ export class OrdersService implements OnModuleInit {
           );
         }
 
-        const itemTotal = Number(product.basePrice) * item.quantity;
+        // قیمت مؤثر با تخفیف محصول (منبع واحد حقیقت) — روی OrderItem snapshot می‌شود.
+        const { price: unitPrice } = computeEffectivePrice(
+          Number(product.basePrice),
+          product.discounts,
+        );
+        const itemTotal = unitPrice * item.quantity;
         totalAmount += itemTotal;
 
         orderItems.push({
           productId: product.id,
           productName: product.name,
           quantity: item.quantity,
-          unitPrice: Number(product.basePrice),
+          unitPrice,
           totalPrice: itemTotal,
-        });
-
-        // Reduce stock
-        await manager.update(Product, product.id, {
-          stock: product.stock - item.quantity,
         });
       }
 
@@ -114,14 +114,7 @@ export class OrdersService implements OnModuleInit {
           const couponDiscount = Number(cart.discountAmount);
           appliedCouponCode = coupon.code;
           discountAmount += couponDiscount;
-
-          await manager.save(
-            manager.create(CouponUsage, {
-              couponId: coupon.id,
-              userId: user.id,
-              discountApplied: couponDiscount,
-            }),
-          );
+          // ثبت CouponUsage به confirmPaidOrder (پس از موفقیت پرداخت) موکول می‌شود.
         }
       }
 
@@ -134,20 +127,7 @@ export class OrdersService implements OnModuleInit {
         if (loyalty && loyalty.availablePoints >= dto.pointsToRedeem) {
           pointsRedeemedAmount = dto.pointsToRedeem / 100; // 100 points = 1 currency unit
           discountAmount += pointsRedeemedAmount;
-
-          await manager.update(UserLoyalty, loyalty.id, {
-            availablePoints: loyalty.availablePoints - dto.pointsToRedeem,
-            totalPoints: loyalty.totalPoints - dto.pointsToRedeem,
-          });
-
-          await manager.save(
-            manager.create(PointTransaction, {
-              userId: user.id,
-              points: -dto.pointsToRedeem,
-              type: PointTransactionType.REDEEM,
-              reason: "Points redeemed on order",
-            }),
-          );
+          // خرج امتیاز به confirmPaidOrder (پس از موفقیت پرداخت) موکول می‌شود.
         }
       }
 
@@ -169,6 +149,7 @@ export class OrdersService implements OnModuleInit {
           couponCode: appliedCouponCode,
           pointsRedeemed: dto.pointsToRedeem ?? 0,
           shippingAddress: dto.shippingAddress,
+          shippingMethod: dto.shippingMethod,
           items: orderItems as OrderItem[],
         }),
       );
@@ -186,9 +167,7 @@ export class OrdersService implements OnModuleInit {
         }
       }
 
-      // Clear cart
-      await manager.delete(CartItem, { cartId: cart.id });
-
+      // سبد اینجا خالی نمی‌شود؛ خالی‌کردن سبد به confirmPaidOrder (پس از پرداخت موفق) موکول است.
       return order;
     });
 
@@ -201,6 +180,95 @@ export class OrdersService implements OnModuleInit {
     }
 
     return createdOrder;
+  }
+
+  /**
+   * مصرف واقعی منابع پس از پرداخت موفق — کم‌کردن موجودی، ثبت مصرف کوپن، خرج امتیاز،
+   * خالی‌کردن سبد و CONFIRMED کردن سفارش. باید داخل تراکنش فراخواننده (verify پرداخت)
+   * اجرا شود تا با PAID شدن پرداخت یک واحد اتمیک بسازد. اگر موجودی لحظه‌ی پرداخت کافی
+   * نباشد throw می‌کند تا کل تراکنش (از جمله PAID شدن) rollback شود.
+   */
+  async confirmPaidOrder(
+    manager: EntityManager,
+    order: Order,
+    paidAt: Date = new Date(),
+  ): Promise<void> {
+    const items = await manager.find(OrderItem, {
+      where: { orderId: order.id },
+    });
+
+    // ۱) کم‌کردن موجودی با قفل و اعتبارسنجی مجدد (زمان بین ثبت سفارش و پرداخت گذشته است)
+    for (const item of items) {
+      const product = await manager.findOne(Product, {
+        where: { id: item.productId },
+        lock: { mode: "pessimistic_write" },
+      });
+      if (!product || !product.isActive) {
+        throw new BadRequestException(
+          `Product ${item.productId} is no longer available`,
+        );
+      }
+      if (product.stock < item.quantity) {
+        throw new BadRequestException(`Insufficient stock for ${product.name}`);
+      }
+      await manager.update(Product, product.id, {
+        stock: product.stock - item.quantity,
+      });
+    }
+
+    // ۲) ثبت مصرف کوپن (تخفیف کوپن = کل تخفیف منهای معادل امتیاز خرج‌شده)
+    if (order.couponCode) {
+      const coupon = await manager.findOne(Coupon, {
+        where: { code: order.couponCode, isActive: true },
+      });
+      if (coupon) {
+        const couponDiscount =
+          Number(order.discountAmount) - (order.pointsRedeemed ?? 0) / 100;
+        await manager.save(
+          manager.create(CouponUsage, {
+            couponId: coupon.id,
+            userId: order.userId,
+            orderId: order.id,
+            discountApplied: couponDiscount,
+          }),
+        );
+      }
+    }
+
+    // ۳) خرج امتیاز وفاداری
+    if (order.pointsRedeemed && order.pointsRedeemed > 0) {
+      const loyalty = await manager.findOne(UserLoyalty, {
+        where: { userId: order.userId },
+      });
+      if (loyalty && loyalty.availablePoints >= order.pointsRedeemed) {
+        await manager.update(UserLoyalty, loyalty.id, {
+          availablePoints: loyalty.availablePoints - order.pointsRedeemed,
+          totalPoints: loyalty.totalPoints - order.pointsRedeemed,
+        });
+        await manager.save(
+          manager.create(PointTransaction, {
+            userId: order.userId,
+            points: -order.pointsRedeemed,
+            type: PointTransactionType.REDEEM,
+            reason: "Points redeemed on order",
+          }),
+        );
+      }
+    }
+
+    // ۴) خالی‌کردن سبد کاربر
+    const cart = await manager.findOne(Cart, {
+      where: { userId: order.userId },
+    });
+    if (cart) {
+      await manager.delete(CartItem, { cartId: cart.id });
+    }
+
+    // ۵) نهایی‌کردن سفارش
+    await manager.update(Order, order.id, {
+      status: OrderStatus.CONFIRMED,
+      paidAt,
+    });
   }
 
   async findUserOrders(userId: string, page = 1, limit = 20) {
@@ -234,7 +302,44 @@ export class OrdersService implements OnModuleInit {
       relations: { items: true, user: true },
     });
     if (!order) throw new NotFoundException("Order not found");
+    await this.attachProductImages(order);
     return order;
+  }
+
+  /**
+   * تصویر شاخص هر محصول را (برای آیتم‌هایی که productId دارند) از جدول
+   * product_images می‌خواند و روی item.productImage می‌گذارد. آیتم‌های سفارش
+   * snapshot هستند و تصویر را ذخیره نمی‌کنند؛ این‌جا فقط برای نمایش پُر می‌شود.
+   */
+  private async attachProductImages(order: Order): Promise<void> {
+    const productIds = [
+      ...new Set(
+        (order.items ?? [])
+          .map((it) => it.productId)
+          .filter((id): id is string => !!id),
+      ),
+    ];
+    if (productIds.length === 0) return;
+
+    const images = await this.dataSource.getRepository(ProductImage).find({
+      where: { productId: In(productIds) },
+      order: { isPrimary: "DESC", order: "ASC" },
+    });
+
+    const byProduct = new Map<string, string>();
+    for (const img of images) {
+      // اولین تصویر هر محصول (شاخص یا کم‌ترین order) نگه داشته می‌شود
+      if (!byProduct.has(img.productId)) {
+        byProduct.set(img.productId, img.thumbnailUrl ?? img.mediumUrl ?? img.url);
+      }
+    }
+
+    for (const item of order.items ?? []) {
+      if (item.productId) {
+        const url = byProduct.get(item.productId);
+        if (url) item.productImage = url;
+      }
+    }
   }
 
   async updateStatus(id: string, status: OrderStatus): Promise<Order> {

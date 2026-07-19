@@ -1,9 +1,10 @@
 import { Body, Controller, Get, Post, Query, Res } from "@nestjs/common";
-import { ApiTags } from "@nestjs/swagger";
+import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { Public } from "../../common/decorators/public.decorator";
 import { User } from "../users/entities/user.entity";
+import { CreateOrderDto } from "../orders/dto/order.dto";
 import { CreatePaymentDto } from "./dto/create-payment.dto";
 import { PaymentService } from "./payment.service";
 
@@ -12,9 +13,20 @@ import { PaymentService } from "./payment.service";
 export class PaymentController {
   constructor(private readonly paymentService: PaymentService) {}
 
-  /** ساخت تراکنش برای سفارش و برگرداندن آدرس درگاه زرین‌پال. */
+  /**
+   * چک‌اوت یک‌مرحله‌ای: در یک درخواست سفارش را از روی سبد می‌سازد، تراکنش پرداخت
+   * را ایجاد می‌کند و آدرس درگاه را برمی‌گرداند.
+   */
   @Post()
-  create(@CurrentUser() user: User, @Body() dto: CreatePaymentDto) {
+  @ApiOperation({ summary: "Create order from cart and start payment" })
+  checkout(@CurrentUser() user: User, @Body() dto: CreateOrderDto) {
+    return this.paymentService.checkout(user, dto);
+  }
+
+  /** تلاش مجدد پرداخت برای یک سفارشِ موجودِ در انتظار پرداخت. */
+  @Post("retry")
+  @ApiOperation({ summary: "Start a new payment for an existing pending order" })
+  retry(@CurrentUser() user: User, @Body() dto: CreatePaymentDto) {
     return this.paymentService.createForOrder(user, dto.orderId);
   }
 
