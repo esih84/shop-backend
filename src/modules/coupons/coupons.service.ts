@@ -8,6 +8,7 @@ import { Product } from '../products/entities/product.entity';
 import { Category } from '../categories/entities/category.entity';
 import { CreateCouponDto } from './dto/coupon.dto';
 import { calcCouponDiscount, eligibleSubtotal, CouponLine } from './coupon-calc';
+import { computeEffectivePrice } from '../products/product-pricing.util';
 import { paginated } from '../../common/dto/paginated-result';
 
 @Injectable()
@@ -105,18 +106,25 @@ export class CouponsService {
 
     const cart = await this.cartRepository.findOne({
       where: { userId },
-      relations: { items: { product: true } },
+      relations: { items: { product: { discounts: true } } },
     });
     if (!cart?.items?.length) {
       throw new BadRequestException('سبد خرید شما خالی است');
     }
 
-    const lines: CouponLine[] = cart.items.map((item) => ({
-      productId: item.productId,
-      categoryId: item.product?.categoryId,
-      unitPrice: Number(item.product?.basePrice ?? 0),
-      quantity: item.quantity,
-    }));
+    const lines: CouponLine[] = cart.items.map((item) => {
+      const { price, activeDiscount } = computeEffectivePrice(
+        Number(item.product?.basePrice ?? 0),
+        item.product?.discounts,
+      );
+      return {
+        productId: item.productId,
+        categoryId: item.product?.categoryId,
+        unitPrice: price,
+        quantity: item.quantity,
+        hasProductDiscount: activeDiscount != null,
+      };
+    });
 
     const base = eligibleSubtotal(coupon, lines);
     if (base <= 0) {

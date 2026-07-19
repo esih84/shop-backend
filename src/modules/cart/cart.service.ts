@@ -8,6 +8,8 @@ import { Repository } from "typeorm";
 import { Cart } from "./entities/cart.entity";
 import { CartItem } from "./entities/cart-item.entity";
 import { Product } from "../products/entities/product.entity";
+import { Discount } from "../products/entities/discount.entity";
+import { computeEffectivePrice } from "../products/product-pricing.util";
 import { AddCartItemDto, UpdateCartItemDto } from "./dto/cart.dto";
 import { User } from "../users/entities/user.entity";
 
@@ -35,7 +37,7 @@ export class CartService {
       where: { userId },
       relations: {
         items: {
-          product: { images: true },
+          product: { images: true, discounts: true },
         },
       },
     });
@@ -47,6 +49,20 @@ export class CartService {
           expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
         }),
       );
+    }
+
+    // قیمت مؤثر با تخفیف محصول را روی هر آیتم می‌گذاریم تا فرانت قیمت درست را نشان دهد.
+    for (const item of cart.items ?? []) {
+      if (!item.product) continue;
+      const { price, activeDiscount } = computeEffectivePrice(
+        Number(item.product.basePrice),
+        item.product.discounts,
+      );
+      (item.product as Product & { discountedPrice: number }).discountedPrice =
+        price;
+      (
+        item.product as Product & { activeDiscount: Discount | null }
+      ).activeDiscount = activeDiscount;
     }
     return cart;
   }

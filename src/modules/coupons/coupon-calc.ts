@@ -6,10 +6,14 @@ export interface CouponLine {
   categoryId?: string | null;
   unitPrice: number;
   quantity: number;
+  /** آیا خودِ محصول تخفیف فعال دارد؟ چنین اقلامی از شمول کوپن خارج‌اند. */
+  hasProductDiscount?: boolean;
 }
 
 /** آیا این قلم مشمول دامنه‌ی (scope) کوپن است؟ */
 function isLineEligible(coupon: Coupon, line: CouponLine): boolean {
+  // اقلامی که خودشان تخفیف محصول دارند مشمول کوپن نمی‌شوند («تخفیف روی تخفیف» ممنوع).
+  if (line.hasProductDiscount) return false;
   switch (coupon.scope) {
     case CouponScope.PRODUCT:
       return (coupon.products ?? []).some((p) => p.id === line.productId);
@@ -41,12 +45,10 @@ export function calcCouponDiscount(
   lines: CouponLine[],
 ): number {
   const base = eligibleSubtotal(coupon, lines);
-  console.log(coupon);
   if (base <= 0) return 0;
 
   if (coupon.type === CouponType.PERCENTAGE) {
     let discount = (base * Number(coupon.value)) / 100;
-    console.log(discount);
     if (coupon.maxDiscount) {
       discount = Math.min(discount, Number(coupon.maxDiscount));
     }
